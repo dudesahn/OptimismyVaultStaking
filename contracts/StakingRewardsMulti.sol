@@ -2,13 +2,13 @@
 pragma solidity ^0.5.16;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20Detailed.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 // Inheritance
 import "./interfaces/IStakingRewards.sol";
-import "./RewardsDistributionRecipient.sol";
 import "./Pausable.sol";
 
 // https://docs.synthetix.io/contracts/source/contracts/stakingrewards
@@ -32,7 +32,7 @@ contract StakingRewardsMulti is IStakingRewards, ReentrancyGuard, Pausable {
         uint256 rewardsDuration;
         /// @notice The end (timestamp) of our current or most recent reward period.
         uint256 periodFinish;
-        /// @notice The distribution rate of rewardsToken per second.
+        /// @notice The distribution rate of reward token per second.
         uint256 rewardRate;
         /**
          * @notice The last time rewards were updated, triggered by updateReward() or notifyRewardAmount().
@@ -46,10 +46,14 @@ contract StakingRewardsMulti is IStakingRewards, ReentrancyGuard, Pausable {
         uint256 rewardPerTokenStored;
     }
 
-    /// @notice The address of our rewards token => reward info.
+    /// @notice The address of our reward token => reward info.
     mapping(address => Reward) public rewardData;
 
+    /// @notice Array containing the addresses of all of our reward tokens.
     address[] public rewardTokens;
+
+    /// @notice The address of our staking token.
+    IERC20 public stakingToken;
 
     /// @notice The address of our zap contract, allows depositing to vault and staking in one transaction.
     address public zapContract;
@@ -305,7 +309,7 @@ contract StakingRewardsMulti is IStakingRewards, ReentrancyGuard, Pausable {
 
     /**
      * @notice Sweep out tokens accidentally sent here.
-     * @dev May only be called by owner.
+     * @dev May only be called by owner. If a pool has multiple rewards tokens to sweep out, call this once for each.
      * @param _tokenAddress Address of token to sweep.
      * @param _tokenAmount Amount of tokens to sweep.
      */
@@ -313,20 +317,35 @@ contract StakingRewardsMulti is IStakingRewards, ReentrancyGuard, Pausable {
         external
         onlyOwner
     {
-        require(
-            _tokenAddress != address(stakingToken),
-            "Cannot withdraw the staking token"
-        );
+        if (_tokenAddress == address(stakingToken)) {
+            revert("Cannot withdraw the staking token");
+        }
 
-        // can only recover rewardsToken 90 days after end
-        if (_tokenAddress == address(rewardsToken)) {
+        // can only recover reward tokens 90 days after last reward token ends
+        bool isRewardToken;
+        address[] memory _rewardTokens = rewardTokens;
+        uint256 maxPeriodFinish;
+
+        for (uint256 i; i < _rewardTokens.length; ++i) {
+            uint256 rewardPeriodFinish =
+                rewardData[_rewardTokens[i]].periodFinish;
+            if (rewardPeriodFinish > maxPeriodFinish) {
+                maxPeriodFinish = rewardPeriodFinish;
+            }
+
+            if (_rewardTokens[i] == _tokenAddress) {
+                isRewardToken = true;
+            }
+        }
+
+        if (isRewardToken) {
             require(
-                block.timestamp > periodFinish + 90 days,
+                block.timestamp > maxPeriodFinish + 90 days,
                 "wait 90 days to sweep leftover rewards"
             );
 
-            // if we do this, automatically sweep all rewardsToken
-            _tokenAmount = rewardsToken.balanceOf(address(this));
+            // if we do this, automatically sweep all reward token
+            _tokenAmount = IERC20(_tokenAddress).balanceOf(address(this));
 
             // retire this staking contract, this wipes all rewards but still allows all users to withdraw
             isRetired = true;
@@ -410,7 +429,7 @@ contract StakingRewardsMulti is IStakingRewards, ReentrancyGuard, Pausable {
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(
         address indexed user,
-        address indexed rewardsToken,
+        address indexed rewardToken,
         uint256 reward
     );
     event RewardsDurationUpdated(address token, uint256 newDuration);
