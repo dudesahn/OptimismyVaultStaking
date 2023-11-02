@@ -168,12 +168,6 @@ def new_zap(StakingRewardsZap, gov, live_registry):
 
 
 @pytest.fixture
-def old_live_zap(StakingRewardsZapOld):
-    old_live_zap = StakingRewardsZapOld.at("0xd155F5bF8a475007Fa369e6314C3673e4Bb1e292")
-    yield old_live_zap
-
-
-@pytest.fixture
 def yvdai_pool(StakingRewards, gov, registry, yvdai, yvop, zap):
     yvdai_pool = gov.deploy(
         StakingRewards,
@@ -184,12 +178,6 @@ def yvdai_pool(StakingRewards, gov, registry, yvdai, yvop, zap):
         zap.address,
     )
     yield yvdai_pool
-
-
-@pytest.fixture
-def yvdai_pool_live(StakingRewards):
-    yvdai_pool_live = StakingRewards.at("0xf8126EF025651E1B313a6893Fcf4034F4F4bD2aA")
-    yield yvdai_pool_live
 
 
 # @pytest.fixture
