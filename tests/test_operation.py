@@ -436,7 +436,9 @@ def test_zap(
 
     # exit, check that we have the same principal and earned more rewards
     yvdai_pool.exit({"from": dai_whale})
-    yvdai.withdraw({"from": dai_whale})
+    yvdai.withdraw(
+        yvdai.balanceOf(dai_whale), dai_whale, dai_whale, {"from": dai_whale}
+    )
     assert pytest.approx(dai_starting, rel=RELATIVE_APPROX) == dai.balanceOf(dai_whale)
     assert yvop.balanceOf(dai_whale) > earned
 

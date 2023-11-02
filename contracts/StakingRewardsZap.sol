@@ -6,7 +6,7 @@ import "@openzeppelin_new/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin_new/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IVault is IERC20 {
-    function token() external view returns (address);
+    function asset() external view returns (address);
 
     function deposit(uint256, address) external returns (uint256);
 }
@@ -60,13 +60,14 @@ contract StakingRewardsZap is Ownable {
 
         // get our underlying token
         IVault targetVault = IVault(_targetVault);
-        IERC20 underlying = IERC20(targetVault.token());
+        IERC20 underlying = IERC20(targetVault.asset());
 
         // transfer to zap and deposit underlying to vault, but first check our approvals and store starting amount
-        _checkAllowance(_targetVault, address(underlying), _underlyingAmount);
         uint256 beforeAmount = underlying.balanceOf(address(this));
         underlying.transferFrom(msg.sender, address(this), _underlyingAmount);
 
+        // Check allowance to the
+        _checkAllowance(_targetVault, address(underlying), _underlyingAmount);
         // deposit only our underlying amount, make sure deposit worked
         uint256 toStake = targetVault.deposit(_underlyingAmount, address(this));
 
