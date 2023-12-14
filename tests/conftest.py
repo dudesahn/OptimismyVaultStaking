@@ -1,5 +1,5 @@
 import pytest
-from brownie import config
+from brownie import config, project
 from brownie import Contract, interface
 
 
@@ -46,9 +46,14 @@ def keeper(accounts):
 
 
 @pytest.fixture
-def yvdai():
-    token_address = "0x65343F414FFD6c97b0f6add33d16F6845Ac22BAc"  # this is our test staking vault (yvDAI 0.4.5)
-    yield interface.IVaultFactory045(token_address)
+def whale(accounts):
+    yield accounts.at("0xBA12222222228d8Ba445958a75a0704d566BF2C8", force=True)
+
+
+@pytest.fixture
+def yvdai(deploy_vault):
+    token_address = "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1"  # DAI
+    yield deploy_vault(token_address)
 
 
 @pytest.fixture
@@ -58,37 +63,37 @@ def yvdai_amount(yvdai):
 
 
 @pytest.fixture
-def yvdai_whale(accounts):
-    yvdai_whale = accounts.at(
-        "0x8651bA8416F97a27147E58423240cc786f5A0D32", force=True
-    )  # ~2900 yvDAI
-    yield yvdai_whale
+def yvdai_whale(whale, yvdai, yvdai_amount, user):
+    dai = interface.IERC20(yvdai.asset())
+    dai.approve(yvdai, yvdai_amount, {"from": whale})
+    yvdai.deposit(yvdai_amount, user, {"from": whale})
+    yield user
 
 
 @pytest.fixture
-def yvusdc():
-    token_address = "0xaD17A225074191d5c8a37B50FdA1AE278a2EE6A2"  # this is our test staking vault (yvUSDC 0.4.5)
-    yield interface.IVaultFactory045(token_address)
+def yvusdc(deploy_vault):
+    token_address = "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"  # tusdc
+    yield deploy_vault(token_address)
 
 
 @pytest.fixture
-def yvusdc_amount(yvusdc):
-    yvusdc_amount = 600 * 10 ** yvusdc.decimals()
+def yvusdc_amount():
+    yvusdc_amount = 600e6
     yield yvusdc_amount
 
 
 @pytest.fixture
-def yvusdc_whale(accounts):
-    yvusdc_whale = accounts.at(
-        "0x2EBd8C6325591711280f2a735bc189509620349B", force=True
-    )  # ~1500 yvusdc
-    yield yvusdc_whale
+def yvusdc_whale(whale, yvusdc, yvusdc_amount, user):
+    usdc = interface.IERC20(yvusdc.asset())
+    usdc.approve(yvusdc, yvusdc_amount, {"from": whale})
+    yvusdc.deposit(yvusdc_amount, user, {"from": whale})
+    yield user
 
 
 @pytest.fixture
-def yvop():
-    token_address = "0x7D2382b1f8Af621229d33464340541Db362B4907"  # $OP yVault
-    yield interface.IVaultFactory045(token_address)
+def yvop(deploy_vault):
+    token_address = "0x4200000000000000000000000000000000000042"  # $OP
+    yield deploy_vault(token_address)
 
 
 @pytest.fixture
@@ -98,11 +103,11 @@ def yvop_amount(yvop):
 
 
 @pytest.fixture
-def yvop_whale(accounts):
-    yvop_whale = accounts.at(
-        "0xE880F32E33061919D09811EeE00Ee94392cd4fde", force=True
-    )  # ~2000 yvop
-    yield yvop_whale
+def yvop_whale(whale, yvop, yvop_amount, user):
+    op = interface.IERC20(yvop.asset())
+    op.approve(yvop, yvop_amount, {"from": whale})
+    yvop.deposit(yvop_amount, user, {"from": whale})
+    yield user
 
 
 @pytest.fixture
@@ -126,8 +131,17 @@ def dai_whale(accounts):
 
 
 @pytest.fixture
-def registry(StakingRewardsRegistry, gov):
-    registry = gov.deploy(StakingRewardsRegistry)
+def deploy_vault(MockVault, gov):
+    def deploy_vault(asset, management=gov):
+        vault = management.deploy(MockVault, asset)
+        return vault
+
+    yield deploy_vault
+
+
+@pytest.fixture
+def registry(StakingRewardsRegistry, yvdai_pool, gov, zap):
+    registry = gov.deploy(StakingRewardsRegistry, yvdai_pool, zap)
     registry.setPoolEndorsers(gov, True, {"from": gov})
     registry.setApprovedPoolOwner(gov, True, {"from": gov})
     yield registry
@@ -142,25 +156,20 @@ def live_registry(StakingRewardsRegistry):
 
 
 @pytest.fixture
-def zap(StakingRewardsZap, gov, registry):
-    zap = gov.deploy(StakingRewardsZap, registry.address)
+def zap(StakingRewardsZap, gov):
+    zap = gov.deploy(StakingRewardsZap)
     yield zap
 
 
 @pytest.fixture
 def new_zap(StakingRewardsZap, gov, live_registry):
-    new_zap = gov.deploy(StakingRewardsZap, live_registry)
+    new_zap = gov.deploy(StakingRewardsZap)
+    new_zap.setPoolRegistry(live_registry, {"from": gov})
     yield new_zap
 
 
 @pytest.fixture
-def old_live_zap(StakingRewardsZapOld):
-    old_live_zap = StakingRewardsZapOld.at("0xd155F5bF8a475007Fa369e6314C3673e4Bb1e292")
-    yield old_live_zap
-
-
-@pytest.fixture
-def yvdai_pool(StakingRewards, gov, registry, yvdai, yvop, zap):
+def yvdai_pool(StakingRewards, gov, yvdai, yvop, zap):
     yvdai_pool = gov.deploy(
         StakingRewards,
         gov.address,
@@ -173,26 +182,7 @@ def yvdai_pool(StakingRewards, gov, registry, yvdai, yvop, zap):
 
 
 @pytest.fixture
-def yvdai_pool_live(StakingRewards):
-    yvdai_pool_live = StakingRewards.at("0xf8126EF025651E1B313a6893Fcf4034F4F4bD2aA")
-    yield yvdai_pool_live
-
-
-# @pytest.fixture
-# def yvdai_pool_clonable(StakingRewardsClonable, gov, registry, yvdai, yvop, zap):
-#     yvdai_pool_clonable = gov.deploy(
-#         StakingRewardsClonable,
-#         gov.address,
-#         gov.address,
-#         yvop.address,
-#         yvdai.address,
-#         zap.address,
-#     )
-#     yield yvdai_pool_clonable
-
-
-@pytest.fixture
-def yvusdc_pool(StakingRewards, gov, registry, yvusdc, yvop, zap):
+def yvusdc_pool(StakingRewards, gov, yvusdc, yvop, zap):
     yvusdc_pool = gov.deploy(
         StakingRewards,
         gov.address,
