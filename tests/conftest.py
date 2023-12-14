@@ -140,8 +140,8 @@ def deploy_vault(MockVault, gov):
 
 
 @pytest.fixture
-def registry(StakingRewardsRegistry, gov):
-    registry = gov.deploy(StakingRewardsRegistry)
+def registry(StakingRewardsRegistry, yvdai_pool, gov, zap):
+    registry = gov.deploy(StakingRewardsRegistry, yvdai_pool, zap)
     registry.setPoolEndorsers(gov, True, {"from": gov})
     registry.setApprovedPoolOwner(gov, True, {"from": gov})
     yield registry
@@ -156,19 +156,20 @@ def live_registry(StakingRewardsRegistry):
 
 
 @pytest.fixture
-def zap(StakingRewardsZap, gov, registry):
-    zap = gov.deploy(StakingRewardsZap, registry.address)
+def zap(StakingRewardsZap, gov):
+    zap = gov.deploy(StakingRewardsZap)
     yield zap
 
 
 @pytest.fixture
 def new_zap(StakingRewardsZap, gov, live_registry):
-    new_zap = gov.deploy(StakingRewardsZap, live_registry)
+    new_zap = gov.deploy(StakingRewardsZap)
+    new_zap.setPoolRegistry(live_registry, {"from": gov})
     yield new_zap
 
 
 @pytest.fixture
-def yvdai_pool(StakingRewards, gov, registry, yvdai, yvop, zap):
+def yvdai_pool(StakingRewards, gov, yvdai, yvop, zap):
     yvdai_pool = gov.deploy(
         StakingRewards,
         gov.address,
@@ -180,21 +181,8 @@ def yvdai_pool(StakingRewards, gov, registry, yvdai, yvop, zap):
     yield yvdai_pool
 
 
-# @pytest.fixture
-# def yvdai_pool_clonable(StakingRewardsClonable, gov, registry, yvdai, yvop, zap):
-#     yvdai_pool_clonable = gov.deploy(
-#         StakingRewardsClonable,
-#         gov.address,
-#         gov.address,
-#         yvop.address,
-#         yvdai.address,
-#         zap.address,
-#     )
-#     yield yvdai_pool_clonable
-
-
 @pytest.fixture
-def yvusdc_pool(StakingRewards, gov, registry, yvusdc, yvop, zap):
+def yvusdc_pool(StakingRewards, gov, yvusdc, yvop, zap):
     yvusdc_pool = gov.deploy(
         StakingRewards,
         gov.address,

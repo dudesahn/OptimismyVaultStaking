@@ -195,6 +195,9 @@ def test_sweep_rewards(
     dai_whale,
     dai_amount,
 ):
+    # Setup zap
+    zap.setPoolRegistry(registry, {"from": gov})
+
     # Approve and deposit to the staking contract
     yvdai_starting = yvdai.balanceOf(yvdai_whale)
     yvdai.approve(yvdai_pool, 2**256 - 1, {"from": yvdai_whale})
@@ -378,12 +381,15 @@ def test_zap(
     yvusdc_pool,
     RELATIVE_APPROX,
 ):
+    # Setup zap
+    zap.setPoolRegistry(registry, {"from": gov})
+
     # Approve and zap into to the staking contract
     dai_starting = dai.balanceOf(dai_whale)
     dai.approve(zap, 2**256 - 1, {"from": dai_whale})
 
     # can't deposit into a contract that isn't in our registry
-    with brownie.reverts("staking pool doesn't exist"):
+    with brownie.reverts("staking pool does not exist"):
         zap.zapIn(yvdai, dai_amount, {"from": dai_whale})
 
     # can't zap into zero address (vault deposit() step will fail)

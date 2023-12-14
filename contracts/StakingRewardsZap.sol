@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.15;
+pragma solidity 0.8.18;
 
 import "@openzeppelin_new/contracts/access/Ownable.sol";
 import "@openzeppelin_new/contracts/token/ERC20/IERC20.sol";
@@ -38,12 +38,6 @@ contract StakingRewardsZap is Ownable {
     event UpdatedPoolRegistry(address registry);
     event Recovered(address token, uint256 amount);
 
-    /* ========== CONSTRUCTOR ========== */
-
-    constructor(address _stakingPoolRegistry) {
-        stakingPoolRegistry = _stakingPoolRegistry;
-    }
-
     /* ========== MUTATIVE FUNCTIONS ========== */
 
     function zapIn(address _targetVault, uint256 _underlyingAmount)
@@ -57,7 +51,7 @@ contract StakingRewardsZap is Ownable {
             );
         require(
             address(_vaultStakingPool) != address(0),
-            "staking pool doesn't exist"
+            "staking pool does not exist"
         );
 
         // get our underlying token
@@ -65,6 +59,7 @@ contract StakingRewardsZap is Ownable {
 
         // transfer to zap and deposit underlying to vault, but first check our approvals and store starting amount
         uint256 beforeAmount = underlying.balanceOf(address(this));
+
         underlying.safeTransferFrom(
             msg.sender,
             address(this),

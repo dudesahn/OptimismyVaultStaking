@@ -30,13 +30,13 @@ contract StakingRewards is
     IERC20 public stakingToken;
 
     /// @notice The end (timestamp) of our current or most recent reward period.
-    uint256 public periodFinish = 0;
+    uint256 public periodFinish;
 
     /// @notice The distribution rate of rewardsToken per second.
-    uint256 public rewardRate = 0;
+    uint256 public rewardRate;
 
     /// @notice The duration of our rewards distribution for staking, default is 7 days.
-    uint256 public rewardsDuration = 7 days;
+    uint256 public rewardsDuration;
 
     /// @notice The last time rewards were updated, triggered by updateReward() or notifyRewardAmount().
     /// @dev Will be the timestamp of the update or the end of the period, whichever is earlier.
@@ -73,10 +73,34 @@ contract StakingRewards is
         address _stakingToken,
         address _zapContract
     ) public Owned(_owner) {
+        initialize(
+            _owner,
+            _rewardsDistribution,
+            _rewardsToken,
+            _stakingToken,
+            _zapContract
+        );
+    }
+
+    function initialize(
+        address _owner,
+        address _rewardsDistribution,
+        address _rewardsToken,
+        address _stakingToken,
+        address _zapContract
+    ) public {
+        // make sure that we haven't initialized this before
+        require(address(rewardsToken) == address(0), "initialized");
+
+        owner = _owner;
+        // set up our state vars
         rewardsToken = IERC20(_rewardsToken);
         stakingToken = IERC20(_stakingToken);
         rewardsDistribution = _rewardsDistribution;
         zapContract = _zapContract;
+
+        // default duration to 7 days
+        rewardsDuration = 7 days;
     }
 
     /* ========== VIEWS ========== */
