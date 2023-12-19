@@ -13,14 +13,19 @@ import "./Pausable.sol";
 
 // https://docs.synthetix.io/contracts/source/contracts/stakingrewards
 /**
- * @title Yearn Vault Staking MultiRewards
+ * @title Yearn Vault Staking MultiRewards Permissionless
  * @author YearnFi
  * @notice Modified staking contract that allows users to deposit vault tokens and receive multiple different reward
- *  tokens, and also allows depositing straight from vault underlying via the StakingRewardsZap.
+ *  tokens, and also allows depositing straight from vault underlying via the StakingRewardsZap. Additionally, anyone
+ *  may add more tokens once a reward token has been added by owner.
  *
  *  This work builds on that of Synthetix (StakingRewards.sol) and CurveFi (MultiRewards.sol).
  */
-contract StakingRewardsMulti is IStakingRewards, ReentrancyGuard, Pausable {
+contract StakingRewardsMultiPermissionless is
+    IStakingRewards,
+    ReentrancyGuard,
+    Pausable
+{
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -258,15 +263,18 @@ contract StakingRewardsMulti is IStakingRewards, ReentrancyGuard, Pausable {
 
     /**
      * @notice Notify staking contract that it has more reward to account for.
-     * @dev Reward tokens must be sent to contract before notifying. May only be called
-     *  by rewards distribution role.
+     * @dev Reward tokens must be sent to contract before notifying. May be called by anyone, but only if the staking
+     *  contract has not been retired.
      * @param _rewardAmount Amount of reward tokens to add.
      */
     function notifyRewardAmount(address _rewardsToken, uint256 _rewardAmount)
         external
         updateReward(address(0))
     {
-        require(rewardData[_rewardsToken].rewardsDistributor == msg.sender);
+        if (isRetired) {
+            revert("Staking pool is retired");
+        }
+
         // handle the transfer of reward tokens via `transferFrom` to reduce the number
         // of transactions required and ensure correctness of the reward amount
         IERC20(_rewardsToken).safeTransferFrom(
@@ -346,9 +354,6 @@ contract StakingRewardsMulti is IStakingRewards, ReentrancyGuard, Pausable {
 
             // if we do this, automatically sweep all reward token
             _tokenAmount = IERC20(_tokenAddress).balanceOf(address(this));
-
-            // retire this staking contract, this wipes all rewards but still allows all users to withdraw
-            isRetired = true;
         }
 
         IERC20(_tokenAddress).safeTransfer(owner, _tokenAmount);
@@ -374,6 +379,18 @@ contract StakingRewardsMulti is IStakingRewards, ReentrancyGuard, Pausable {
             _rewardsToken,
             rewardData[_rewardsToken].rewardsDuration
         );
+    }
+
+    // since this contract allows permissionless adding of rewards, we need a single cutoff switch to block this to
+    //  eventually unwind the contract
+    function setRetired() external onlyOwner {
+        // retire this staking contract, this wipes pending rewards, blocks deposits and only allows users to withdraw
+        if (isRetired) {
+            revert("Already retired");
+        }
+
+        isRetired = true;
+        emit StakingRetired(isRetired);
     }
 
     /**
@@ -435,4 +452,5 @@ contract StakingRewardsMulti is IStakingRewards, ReentrancyGuard, Pausable {
     event RewardsDurationUpdated(address token, uint256 newDuration);
     event ZapContractUpdated(address _zapContract);
     event Recovered(address token, uint256 amount);
+    event StakingRetired(bool isRetired);
 }

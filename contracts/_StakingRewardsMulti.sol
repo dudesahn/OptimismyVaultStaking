@@ -1,31 +1,28 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.5.16;
+pragma solidity 0.8.19;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/math/Math.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20Detailed.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts@v4.9.3/math/Math.sol";
+import {
+    SafeERC20,
+    IERC20
+} from "@openzeppelin/contracts@v4.9.3/token/ERC20/SafeERC20.sol";
+import {
+    ReentrancyGuard
+} from "@openzeppelin/contracts@v4.9.3/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts@v4.9.3/security/Pausable.sol";
 
-// Inheritance
-import "./interfaces/IStakingRewards.sol";
-import "./Pausable.sol";
-
-// https://docs.synthetix.io/contracts/source/contracts/stakingrewards
 /**
  * @title Yearn Vault Staking MultiRewards
  * @author YearnFi
  * @notice Modified staking contract that allows users to deposit vault tokens and receive multiple different reward
- *  tokens, and also allows depositing straight from vault underlying via the StakingRewardsZap.
+ *  tokens, and also allows depositing straight from vault underlying via the StakingRewardsZap. Only the owner role
+ *  may add new reward tokens, or add more of existing reward tokens.
  *
  *  This work builds on that of Synthetix (StakingRewards.sol) and CurveFi (MultiRewards.sol).
+ *  Synthetix info: https://docs.synthetix.io/contracts/source/contracts/stakingrewards
  */
-contract StakingRewardsMultiPermissionless is
-    IStakingRewards,
-    ReentrancyGuard,
-    Pausable
-{
-    using SafeMath for uint256;
+
+contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     /* ========== STATE VARIABLES ========== */
@@ -130,13 +127,12 @@ contract StakingRewardsMultiPermissionless is
         }
 
         return
-            rewardData[_rewardsToken].rewardPerTokenStored.add(
-                lastTimeRewardApplicable(_rewardsToken)
-                    .sub(rewardData[_rewardsToken].lastUpdateTime)
-                    .mul(rewardData[_rewardsToken].rewardRate)
-                    .mul(1e18)
-                    .div(_totalSupply)
-            );
+            rewardData[_rewardsToken].rewardPerTokenStored +
+            (lastTimeRewardApplicable(_rewardsToken) -
+                (rewardData[_rewardsToken].lastUpdateTime *
+                    rewardData[_rewardsToken].rewardRate *
+                    1e18) /
+                _totalSupply);
     }
 
     /**
@@ -154,14 +150,11 @@ contract StakingRewardsMultiPermissionless is
         }
 
         return
-            _balances[_account]
-                .mul(
-                rewardPerToken(_rewardsToken).sub(
-                    userRewardPerTokenPaid[_account][_rewardsToken]
-                )
-            )
-                .div(1e18)
-                .add(rewards[_account][_rewardsToken]);
+            (_balances[_account] *
+                (rewardPerToken(_rewardsToken) -
+                    userRewardPerTokenPaid[_account][_rewardsToken])) /
+            1e18 +
+            rewards[_account][_rewardsToken];
     }
 
     function getRewardForDuration(address _rewardsToken)
@@ -170,9 +163,8 @@ contract StakingRewardsMultiPermissionless is
         returns (uint256)
     {
         return
-            rewardData[_rewardsToken].rewardRate.mul(
-                rewardData[_rewardsToken].rewardsDuration
-            );
+            rewardData[_rewardsToken].rewardRate *
+            rewardData[_rewardsToken].rewardsDuration;
     }
 
     /* ========== MUTATIVE FUNCTIONS ========== */
@@ -190,8 +182,8 @@ contract StakingRewardsMultiPermissionless is
     {
         require(_amount > 0, "Cannot stake 0");
         require(!isRetired, "Staking pool is retired");
-        _totalSupply = _totalSupply.add(_amount);
-        _balances[msg.sender] = _balances[msg.sender].add(_amount);
+        _totalSupply = _totalSupply + _amount;
+        _balances[msg.sender] = _balances[msg.sender] + _amount;
         stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
         emit Staked(msg.sender, _amount);
     }
@@ -211,8 +203,8 @@ contract StakingRewardsMultiPermissionless is
         require(msg.sender == zapContract, "Only zap contract");
         require(_amount > 0, "Cannot stake 0");
         require(!isRetired, "Staking pool is retired");
-        _totalSupply = _totalSupply.add(_amount);
-        _balances[_recipient] = _balances[_recipient].add(_amount);
+        _totalSupply = _totalSupply + _amount;
+        _balances[_recipient] = _balances[_recipient] + _amount;
         stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
         emit StakedFor(_recipient, _amount);
     }
@@ -228,8 +220,8 @@ contract StakingRewardsMultiPermissionless is
         updateReward(msg.sender)
     {
         require(_amount > 0, "Cannot withdraw 0");
-        _totalSupply = _totalSupply.sub(_amount);
-        _balances[msg.sender] = _balances[msg.sender].sub(_amount);
+        _totalSupply = _totalSupply - _amount;
+        _balances[msg.sender] = _balances[msg.sender] - _amount;
         stakingToken.safeTransfer(msg.sender, _amount);
         emit Withdrawn(msg.sender, _amount);
     }
@@ -262,18 +254,15 @@ contract StakingRewardsMultiPermissionless is
 
     /**
      * @notice Notify staking contract that it has more reward to account for.
-     * @dev Reward tokens must be sent to contract before notifying. May be called by anyone, but only if the staking
-     *  contract has not been retired.
+     * @dev Reward tokens must be sent to contract before notifying. May only be called
+     *  by rewards distribution role.
      * @param _rewardAmount Amount of reward tokens to add.
      */
     function notifyRewardAmount(address _rewardsToken, uint256 _rewardAmount)
         external
         updateReward(address(0))
     {
-        if (isRetired) {
-            revert("Staking pool is retired");
-        }
-
+        require(rewardData[_rewardsToken].rewardsDistributor == msg.sender);
         // handle the transfer of reward tokens via `transferFrom` to reduce the number
         // of transactions required and ensure correctness of the reward amount
         IERC20(_rewardsToken).safeTransferFrom(
@@ -283,17 +272,17 @@ contract StakingRewardsMultiPermissionless is
         );
 
         if (block.timestamp >= rewardData[_rewardsToken].periodFinish) {
-            rewardData[_rewardsToken].rewardRate = _rewardAmount.div(
-                rewardData[_rewardsToken].rewardsDuration
-            );
+            rewardData[_rewardsToken].rewardRate =
+                _rewardAmount /
+                rewardData[_rewardsToken].rewardsDuration;
         } else {
             uint256 remaining =
-                rewardData[_rewardsToken].periodFinish.sub(block.timestamp);
-            uint256 leftover =
-                remaining.mul(rewardData[_rewardsToken].rewardRate);
-            rewardData[_rewardsToken].rewardRate = _rewardAmount
-                .add(leftover)
-                .div(rewardData[_rewardsToken].rewardsDuration);
+                rewardData[_rewardsToken].periodFinish - block.timestamp;
+            uint256 leftover = remaining * rewardData[_rewardsToken].rewardRate;
+            rewardData[_rewardsToken].rewardRate =
+                _rewardAmount +
+                leftover /
+                rewardData[_rewardsToken].rewardsDuration;
         }
 
         // Ensure the provided reward amount is not more than the balance in the contract.
@@ -303,14 +292,14 @@ contract StakingRewardsMultiPermissionless is
         uint256 balance = IERC20(_rewardsToken).balanceOf(address(this));
         require(
             rewardData[_rewardsToken].rewardRate <=
-                balance.div(rewardData[_rewardsToken].rewardsDuration),
+                balance / rewardData[_rewardsToken].rewardsDuration,
             "Provided reward too high"
         );
 
         rewardData[_rewardsToken].lastUpdateTime = block.timestamp;
-        rewardData[_rewardsToken].periodFinish = block.timestamp.add(
-            rewardData[_rewardsToken].rewardsDuration
-        );
+        rewardData[_rewardsToken].periodFinish =
+            block.timestamp +
+            rewardData[_rewardsToken].rewardsDuration;
         emit RewardAdded(_rewardAmount);
     }
 
@@ -353,6 +342,9 @@ contract StakingRewardsMultiPermissionless is
 
             // if we do this, automatically sweep all reward token
             _tokenAmount = IERC20(_tokenAddress).balanceOf(address(this));
+
+            // retire this staking contract, this wipes all rewards but still allows all users to withdraw
+            isRetired = true;
         }
 
         IERC20(_tokenAddress).safeTransfer(owner, _tokenAmount);
@@ -378,18 +370,6 @@ contract StakingRewardsMultiPermissionless is
             _rewardsToken,
             rewardData[_rewardsToken].rewardsDuration
         );
-    }
-
-    // since this contract allows permissionless adding of rewards, we need a single cutoff switch to block this to
-    //  eventually unwind the contract
-    function setRetired() external onlyOwner {
-        // retire this staking contract, this wipes pending rewards, blocks deposits and only allows users to withdraw
-        if (isRetired) {
-            revert("Already retired");
-        }
-
-        isRetired = true;
-        emit StakingRetired(isRetired);
     }
 
     /**
@@ -451,5 +431,4 @@ contract StakingRewardsMultiPermissionless is
     event RewardsDurationUpdated(address token, uint256 newDuration);
     event ZapContractUpdated(address _zapContract);
     event Recovered(address token, uint256 amount);
-    event StakingRetired(bool isRetired);
 }
