@@ -8,15 +8,15 @@ def test_normal_deposit(
     yvdai,
     yvdai_amount,
     yvdai_whale,
-    yvmkusd,
-    yvmkusd_amount,
-    yvmkusd_whale,
-    ajna,
-    ajna_whale,
+    yvusdc,
+    yvusdc_amount,
+    yvusdc_whale,
+    yvop,
+    yvop_whale,
     registry,
     zap,
     yvdai_pool,
-    yvmkusd_pool,
+    yvusdc_pool,
     dai,
 ):
     # Approve and deposit to the staking contract
@@ -29,31 +29,20 @@ def test_normal_deposit(
     with brownie.reverts("Cannot stake 0"):
         yvdai_pool.stake(0, {"from": yvdai_whale})
 
-    # whale notifies rewards, but only after gov adds token and whale as rewards distro
-    # will revert if tried before token is added
-    with brownie.reverts():
-        yvdai_pool.notifyRewardAmount(ajna, 100e18, {"from": ajna_whale})
-
-    # add ajna and grant role to whale
-    week = 7 * 86400
-    yvdai_pool.addReward(ajna, ajna_whale, week, {"from": gov})
-
-    # now we should be able to notify (make sure we've already done approvals though!)
-    before = ajna.balanceOf(ajna_whale)
-    ajna.approve(yvdai_pool, 2**256 - 1, {"from": ajna_whale})
-    yvdai_pool.notifyRewardAmount(ajna, 100e18, {"from": ajna_whale})
-    assert before == ajna.balanceOf(ajna_whale) + 100e18
+    # whale sends directly to pool, gov notifies rewards
+    yvop.transfer(yvdai_pool, yvop.balanceOf(yvop_whale), {"from": yvop_whale})
+    yvdai_pool.notifyRewardAmount(100e18, {"from": gov})
 
     # sleep to gain some earnings
     chain.sleep(86400)
     chain.mine(1)
 
     # check claimable earnings, get reward
-    assert yvdai_pool.getRewardForDuration(ajna) > 0
-    earned = yvdai_pool.earned(yvdai_whale, ajna)
+    earned = yvdai_pool.earned(yvdai_whale)
     assert earned > 0
     yvdai_pool.getReward({"from": yvdai_whale})
-    assert ajna.balanceOf(yvdai_whale) >= earned
+    assert yvop.balanceOf(yvdai_whale) >= earned
+    assert yvdai_pool.getRewardForDuration({"from": yvdai_whale}) > 0
 
     # sleep to gain some earnings
     chain.sleep(86400)
@@ -66,20 +55,18 @@ def test_normal_deposit(
     # exit, check that we have the same principal and earned more rewards
     yvdai_pool.exit({"from": yvdai_whale})
     assert yvdai_starting == yvdai.balanceOf(yvdai_whale)
-    assert ajna.balanceOf(yvdai_whale) > earned
+    assert yvop.balanceOf(yvdai_whale) > earned
 
     # check our setters
-    with brownie.reverts("Rewards still active"):
-        yvdai_pool.setRewardsDuration(ajna, 100e18, {"from": gov})
+    with brownie.reverts():
+        yvdai_pool.setRewardsDuration(100e18, {"from": gov})
     with brownie.reverts():
         yvdai_pool.setZapContract(ZERO_ADDRESS, {"from": gov})
     yvdai_pool.setZapContract(zap, {"from": gov})
 
     # sleep to get past our rewards window
     chain.sleep(86400 * 6)
-    with brownie.reverts("Must be >0"):
-        yvdai_pool.setRewardsDuration(ajna, 0, {"from": gov})
-    yvdai_pool.setRewardsDuration(ajna, 86400 * 14, {"from": gov})
+    yvdai_pool.setRewardsDuration(86400 * 14, {"from": gov})
     assert dai.balanceOf(zap) == 0
 
 
@@ -88,15 +75,15 @@ def test_insanity(
     yvdai,
     yvdai_amount,
     yvdai_whale,
-    yvmkusd,
-    yvmkusd_amount,
-    yvmkusd_whale,
-    ajna,
-    ajna_whale,
+    yvusdc,
+    yvusdc_amount,
+    yvusdc_whale,
+    yvop,
+    yvop_whale,
     registry,
     zap,
     yvdai_pool,
-    yvmkusd_pool,
+    yvusdc_pool,
     dai,
     dai_whale,
     dai_amount,
@@ -108,11 +95,11 @@ def test_insanity(
     assert yvdai_pool.balanceOf(yvdai_whale) == yvdai_amount
 
     # whale sends directly to pool, gov notifies rewards
-    ajna.transfer(yvdai_pool, 100e18, {"from": ajna_whale})
+    yvop.transfer(yvdai_pool, yvop.balanceOf(yvop_whale), {"from": yvop_whale})
     yvdai_pool.notifyRewardAmount(100e18, {"from": gov})
 
     # make sure we start with nothing
-    assert ajna.balanceOf(yvdai_whale) == 0
+    assert yvop.balanceOf(yvdai_whale) == 0
 
     # sleep to gain some earnings
     chain.sleep(86400)
@@ -146,7 +133,7 @@ def test_insanity(
     print("Earned:", yvdai_pool.earned(yvdai_whale))
     print("rewards:", yvdai_pool.rewards(yvdai_whale))
 
-    claimed = ajna.balanceOf(yvdai_whale)
+    claimed = yvop.balanceOf(yvdai_whale)
     print("Claimed:", claimed)
     staking_token = interface.IERC20(yvdai_pool.stakingToken())
     reward_per_token = yvdai_pool.userRewardPerTokenPaid(yvdai_whale)
@@ -181,7 +168,7 @@ def test_insanity(
     print("rewards:", yvdai_pool.rewards(yvdai_whale))
 
     # this hasn't been reset to zero yet
-    claimed = ajna.balanceOf(yvdai_whale)
+    claimed = yvop.balanceOf(yvdai_whale)
     print("Claimed:", claimed)
     staking_token = interface.IERC20(yvdai_pool.stakingToken())
     reward_per_token = yvdai_pool.userRewardPerTokenPaid(yvdai_whale)
@@ -195,15 +182,15 @@ def test_sweep_rewards(
     yvdai,
     yvdai_amount,
     yvdai_whale,
-    yvmkusd,
-    yvmkusd_amount,
-    yvmkusd_whale,
-    ajna,
-    ajna_whale,
+    yvusdc,
+    yvusdc_amount,
+    yvusdc_whale,
+    yvop,
+    yvop_whale,
     registry,
     zap,
     yvdai_pool,
-    yvmkusd_pool,
+    yvusdc_pool,
     dai,
     dai_whale,
     dai_amount,
@@ -215,7 +202,7 @@ def test_sweep_rewards(
     assert yvdai_pool.balanceOf(yvdai_whale) == yvdai_amount
 
     # whale sends directly to pool, gov notifies rewards
-    ajna.transfer(yvdai_pool, ajna.balanceOf(ajna_whale), {"from": ajna_whale})
+    yvop.transfer(yvdai_pool, yvop.balanceOf(yvop_whale), {"from": yvop_whale})
     yvdai_pool.notifyRewardAmount(100e18, {"from": gov})
 
     # sleep to gain some earnings
@@ -226,7 +213,7 @@ def test_sweep_rewards(
     earned = yvdai_pool.earned(yvdai_whale)
     assert earned > 0
     yvdai_pool.getReward({"from": yvdai_whale})
-    claimed = ajna.balanceOf(yvdai_whale)
+    claimed = yvop.balanceOf(yvdai_whale)
 
     # do >= since we (sometimes?) get extra in the block it takes to harvest
     assert claimed >= earned
@@ -249,11 +236,11 @@ def test_sweep_rewards(
     chain.mine(1)
     earned = yvdai_pool.earned(yvdai_whale)
     assert earned > 0
-    assert ajna.balanceOf(yvdai_pool) > 0
+    assert yvop.balanceOf(yvdai_pool) > 0
 
     # amount doesn't matter since we auto-sweep all rewards token
     yvdai_pool.recoverERC20(yvdai_pool.rewardsToken(), 10e18, {"from": gov})
-    assert ajna.balanceOf(yvdai_pool) == 0
+    assert yvop.balanceOf(yvdai_pool) == 0
 
     # this hasn't been reset to zero yet. multiply by amount of whole tokens we have
     staking_token = interface.IERC20(yvdai_pool.stakingToken())
@@ -269,9 +256,9 @@ def test_sweep_rewards(
     assert yvdai_pool.rewards(yvdai_whale) == 0
 
     # make sure we can get rewards and nothing happens
-    before = ajna.balanceOf(yvdai_whale)
+    before = yvop.balanceOf(yvdai_whale)
     yvdai_pool.getReward({"from": yvdai_whale})
-    after = ajna.balanceOf(yvdai_whale)
+    after = yvop.balanceOf(yvdai_whale)
     assert before == after
 
     # now this should be zero since we called updateReward when calling getReward
@@ -280,7 +267,7 @@ def test_sweep_rewards(
     # make sure our whale can still withdraw
     yvdai_pool.exit({"from": yvdai_whale})
     assert yvdai_starting == yvdai.balanceOf(yvdai_whale)
-    assert ajna.balanceOf(yvdai_whale) > 0
+    assert yvop.balanceOf(yvdai_whale) > 0
     assert yvdai_pool.userRewardPerTokenPaid(yvdai_whale) == 0
 
     # check that we can't stake or zap in
@@ -297,15 +284,15 @@ def test_extend_rewards(
     yvdai,
     yvdai_amount,
     yvdai_whale,
-    yvmkusd,
-    yvmkusd_amount,
-    yvmkusd_whale,
-    ajna,
-    ajna_whale,
+    yvusdc,
+    yvusdc_amount,
+    yvusdc_whale,
+    yvop,
+    yvop_whale,
     registry,
     zap,
     yvdai_pool,
-    yvmkusd_pool,
+    yvusdc_pool,
 ):
     # Approve and deposit to the staking contract
     yvdai_starting = yvdai.balanceOf(yvdai_whale)
@@ -314,7 +301,7 @@ def test_extend_rewards(
     assert yvdai_pool.balanceOf(yvdai_whale) == yvdai_amount
 
     # whale sends directly to pool, gov notifies rewards
-    ajna.transfer(yvdai_pool, ajna.balanceOf(ajna_whale), {"from": ajna_whale})
+    yvop.transfer(yvdai_pool, yvop.balanceOf(yvop_whale), {"from": yvop_whale})
     yvdai_pool.notifyRewardAmount(100e18, {"from": gov})
 
     # sleep to gain some earnings
@@ -325,8 +312,8 @@ def test_extend_rewards(
     earned = yvdai_pool.earned(yvdai_whale)
     assert earned > 0
     yvdai_pool.getReward({"from": yvdai_whale})
-    claimed = ajna.balanceOf(yvdai_whale)
-    assert ajna.balanceOf(yvdai_whale) >= earned
+    claimed = yvop.balanceOf(yvdai_whale)
+    assert yvop.balanceOf(yvdai_whale) >= earned
     assert yvdai_pool.earned(yvdai_whale) == 0
 
     # do >= since we (sometimes?) get extra in the block it takes to harvest
@@ -343,7 +330,7 @@ def test_extend_rewards(
     print("Earned:", earned / 1e18)
 
     # add more rewards
-    ajna.transfer(yvdai_pool, ajna.balanceOf(ajna_whale), {"from": ajna_whale})
+    yvop.transfer(yvdai_pool, yvop.balanceOf(yvop_whale), {"from": yvop_whale})
     yvdai_pool.notifyRewardAmount(100e18, {"from": gov})
 
     # can't add too much
@@ -361,15 +348,15 @@ def test_extend_rewards(
 
     # check claimable earnings, make sure we have more than before
     new_earned = yvdai_pool.earned(yvdai_whale)
-    before_balance = ajna.balanceOf(yvdai_whale)
+    before_balance = yvop.balanceOf(yvdai_whale)
     yvdai_pool.getReward({"from": yvdai_whale})
-    assert ajna.balanceOf(yvdai_whale) - before_balance >= earned
+    assert yvop.balanceOf(yvdai_whale) - before_balance >= earned
     print("New Earned after sleep:", new_earned / 1e18)
 
     # exit, check that we have the same principal and earned more rewards
     yvdai_pool.exit({"from": yvdai_whale})
     assert yvdai_starting == yvdai.balanceOf(yvdai_whale)
-    assert ajna.balanceOf(yvdai_whale) > earned
+    assert yvop.balanceOf(yvdai_whale) > earned
 
 
 def test_zap(
@@ -380,15 +367,15 @@ def test_zap(
     dai,
     dai_amount,
     dai_whale,
-    yvmkusd,
-    yvmkusd_amount,
-    yvmkusd_whale,
-    ajna,
-    ajna_whale,
+    yvusdc,
+    yvusdc_amount,
+    yvusdc_whale,
+    yvop,
+    yvop_whale,
     registry,
     zap,
     yvdai_pool,
-    yvmkusd_pool,
+    yvusdc_pool,
     RELATIVE_APPROX,
 ):
     # Approve and zap into to the staking contract
@@ -425,7 +412,7 @@ def test_zap(
         yvdai_pool.withdraw(100e18, {"from": zap})
 
     # whale sends directly to pool, gov notifies rewards
-    ajna.transfer(yvdai_pool, ajna.balanceOf(ajna_whale), {"from": ajna_whale})
+    yvop.transfer(yvdai_pool, yvop.balanceOf(yvop_whale), {"from": yvop_whale})
     yvdai_pool.notifyRewardAmount(100e18, {"from": gov})
 
     # no problem to zap in a bit more
@@ -441,7 +428,7 @@ def test_zap(
     earned = yvdai_pool.earned(dai_whale)
     assert earned > 0
     yvdai_pool.getReward({"from": dai_whale})
-    assert pytest.approx(ajna.balanceOf(dai_whale), rel=RELATIVE_APPROX) == earned
+    assert pytest.approx(yvop.balanceOf(dai_whale), rel=RELATIVE_APPROX) == earned
 
     # sleep to gain some earnings
     chain.sleep(86400)
@@ -451,7 +438,7 @@ def test_zap(
     yvdai_pool.exit({"from": dai_whale})
     yvdai.withdraw({"from": dai_whale})
     assert pytest.approx(dai_starting, rel=RELATIVE_APPROX) == dai.balanceOf(dai_whale)
-    assert ajna.balanceOf(dai_whale) > earned
+    assert yvop.balanceOf(dai_whale) > earned
 
     # check that no one else can use stakeFor (even gov!)
     yvdai.approve(yvdai_pool, 2**256 - 1, {"from": gov})
@@ -473,15 +460,15 @@ def test_registry(
     dai,
     dai_amount,
     dai_whale,
-    yvmkusd,
-    yvmkusd_amount,
-    yvmkusd_whale,
-    ajna,
-    ajna_whale,
+    yvusdc,
+    yvusdc_amount,
+    yvusdc_whale,
+    yvop,
+    yvop_whale,
     registry,
     zap,
     yvdai_pool,
-    yvmkusd_pool,
+    yvusdc_pool,
     RELATIVE_APPROX,
     StakingRewards,
     strategist,
@@ -499,18 +486,18 @@ def test_registry(
 
     # can't have a mismatch in tokens
     with brownie.reverts():
-        registry.addStakingPool(yvmkusd_pool, yvdai, False, {"from": gov})
+        registry.addStakingPool(yvusdc_pool, yvdai, False, {"from": gov})
 
     # can't replace a pool that hasn't been added yet
     with brownie.reverts():
-        registry.addStakingPool(yvmkusd_pool, yvmkusd, True, {"from": gov})
+        registry.addStakingPool(yvusdc_pool, yvusdc, True, {"from": gov})
 
     # can't add another pool for the same underlying without replacing
     yvdai_pool_too = gov.deploy(
         StakingRewards,
         gov.address,
         gov.address,
-        ajna.address,
+        yvop.address,
         yvdai.address,
         zap.address,
     )
@@ -531,7 +518,7 @@ def test_registry(
         StakingRewards,
         strategist.address,
         strategist.address,
-        ajna.address,
+        yvop.address,
         yvdai.address,
         zap.address,
     )
@@ -553,15 +540,15 @@ def test_registry(
 
     # make sure our length is what we expect for tokens
     assert registry.numTokens() == 1
-    assert registry.isRegistered(yvmkusd.address) == False
-    assert registry.isStakingPoolEndorsed(yvmkusd_pool) == False
+    assert registry.isRegistered(yvusdc.address) == False
+    assert registry.isStakingPoolEndorsed(yvusdc_pool) == False
 
-    # add yvmkusd
-    registry.addStakingPool(yvmkusd_pool, yvmkusd, False, {"from": gov})
+    # add yvusdc
+    registry.addStakingPool(yvusdc_pool, yvusdc, False, {"from": gov})
     assert registry.numTokens() == 2
-    assert registry.isStakingPoolEndorsed(yvmkusd_pool) == True
-    assert registry.isRegistered(yvmkusd.address) == True
+    assert registry.isStakingPoolEndorsed(yvusdc_pool) == True
+    assert registry.isRegistered(yvusdc.address) == True
 
     # check our tokens view
     assert registry.tokens(0) == yvdai.address
-    assert registry.tokens(1) == yvmkusd.address
+    assert registry.tokens(1) == yvusdc.address

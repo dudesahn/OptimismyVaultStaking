@@ -90,10 +90,10 @@ library Address {
      *
      * _Available since v3.1._
      */
-    function functionCall(address target, bytes memory data)
-        internal
-        returns (bytes memory)
-    {
+    function functionCall(
+        address target,
+        bytes memory data
+    ) internal returns (bytes memory) {
         return functionCall(target, data, "Address: low-level call failed");
     }
 
@@ -154,8 +154,9 @@ library Address {
         );
         require(isContract(target), "Address: call to non-contract");
 
-        (bool success, bytes memory returndata) =
-            target.call{value: value}(data);
+        (bool success, bytes memory returndata) = target.call{value: value}(
+            data
+        );
         return verifyCallResult(success, returndata, errorMessage);
     }
 
@@ -165,11 +166,10 @@ library Address {
      *
      * _Available since v3.3._
      */
-    function functionStaticCall(address target, bytes memory data)
-        internal
-        view
-        returns (bytes memory)
-    {
+    function functionStaticCall(
+        address target,
+        bytes memory data
+    ) internal view returns (bytes memory) {
         return
             functionStaticCall(
                 target,
@@ -201,10 +201,10 @@ library Address {
      *
      * _Available since v3.4._
      */
-    function functionDelegateCall(address target, bytes memory data)
-        internal
-        returns (bytes memory)
-    {
+    function functionDelegateCall(
+        address target,
+        bytes memory data
+    ) internal returns (bytes memory) {
         return
             functionDelegateCall(
                 target,
@@ -335,10 +335,10 @@ interface IERC20 {
      *
      * This value changes when {approve} or {transferFrom} are called.
      */
-    function allowance(address owner, address spender)
-        external
-        view
-        returns (uint256);
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint256);
 
     /**
      * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.
@@ -535,11 +535,7 @@ abstract contract Ownable is Context {
 library SafeERC20 {
     using Address for address;
 
-    function safeTransfer(
-        IERC20 token,
-        address to,
-        uint256 value
-    ) internal {
+    function safeTransfer(IERC20 token, address to, uint256 value) internal {
         _callOptionalReturn(
             token,
             abi.encodeWithSelector(token.transfer.selector, to, value)
@@ -652,11 +648,10 @@ library SafeERC20 {
         // we're implementing it ourselves. We use {Address.functionCall} to perform this call, which verifies that
         // the target address contains contract code and also asserts for success in the low-level call.
 
-        bytes memory returndata =
-            address(token).functionCall(
-                data,
-                "SafeERC20: low-level call failed"
-            );
+        bytes memory returndata = address(token).functionCall(
+            data,
+            "SafeERC20: low-level call failed"
+        );
         if (returndata.length > 0) {
             // Return data is optional
             require(
@@ -710,10 +705,10 @@ contract StakingRewardsZap is Ownable {
 
     /* ========== MUTATIVE FUNCTIONS ========== */
 
-    function zapIn(address _targetVault, uint256 _underlyingAmount)
-        external
-        returns (uint256)
-    {
+    function zapIn(
+        address _targetVault,
+        uint256 _underlyingAmount
+    ) external returns (uint256) {
         // get our staking pool from our registry for this vault token
         IRegistry poolRegistry = IRegistry(stakingPoolRegistry);
 
@@ -755,10 +750,10 @@ contract StakingRewardsZap is Ownable {
     }
 
     /// @notice Use this in case someone accidentally sends tokens here.
-    function recoverERC20(address tokenAddress, uint256 tokenAmount)
-        external
-        onlyOwner
-    {
+    function recoverERC20(
+        address tokenAddress,
+        uint256 tokenAmount
+    ) external onlyOwner {
         IERC20(tokenAddress).safeTransfer(owner(), tokenAmount);
         emit Recovered(tokenAddress, tokenAmount);
     }

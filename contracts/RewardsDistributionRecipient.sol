@@ -17,10 +17,9 @@ contract RewardsDistributionRecipient is Owned {
         _;
     }
 
-    function setRewardsDistribution(address _rewardsDistribution)
-        external
-        onlyOwner
-    {
+    function setRewardsDistribution(
+        address _rewardsDistribution
+    ) external onlyOwner {
         rewardsDistribution = _rewardsDistribution;
     }
 }

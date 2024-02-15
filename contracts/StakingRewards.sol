@@ -139,12 +139,9 @@ contract StakingRewards is
     /// @notice Deposit vault tokens to the staking pool.
     /// @dev Can't stake zero.
     /// @param amount Amount of vault tokens to deposit.
-    function stake(uint256 amount)
-        external
-        nonReentrant
-        notPaused
-        updateReward(msg.sender)
-    {
+    function stake(
+        uint256 amount
+    ) external nonReentrant notPaused updateReward(msg.sender) {
         require(amount > 0, "Cannot stake 0");
         require(!isRetired, "Staking pool is retired");
         _totalSupply = _totalSupply.add(amount);
@@ -157,12 +154,10 @@ contract StakingRewards is
     /// @dev Can't stake zero, can only be used by zap contract.
     /// @param recipient Address of user these vault tokens are being staked for.
     /// @param amount Amount of vault token to deposit.
-    function stakeFor(address recipient, uint256 amount)
-        external
-        nonReentrant
-        notPaused
-        updateReward(recipient)
-    {
+    function stakeFor(
+        address recipient,
+        uint256 amount
+    ) external nonReentrant notPaused updateReward(recipient) {
         require(msg.sender == zapContract, "Only zap contract");
         require(amount > 0, "Cannot stake 0");
         require(!isRetired, "Staking pool is retired");
@@ -175,11 +170,9 @@ contract StakingRewards is
     /// @notice Withdraw vault tokens from the staking pool.
     /// @dev Can't withdraw zero. If trying to claim, call getReward() instead.
     /// @param amount Amount of vault tokens to withdraw.
-    function withdraw(uint256 amount)
-        public
-        nonReentrant
-        updateReward(msg.sender)
-    {
+    function withdraw(
+        uint256 amount
+    ) public nonReentrant updateReward(msg.sender) {
         require(amount > 0, "Cannot withdraw 0");
         _totalSupply = _totalSupply.sub(amount);
         _balances[msg.sender] = _balances[msg.sender].sub(amount);
@@ -210,11 +203,9 @@ contract StakingRewards is
     /// @dev Reward tokens must be sent to contract before notifying. May only be called
     ///  by rewards distribution role.
     /// @param reward Amount of reward tokens to add.
-    function notifyRewardAmount(uint256 reward)
-        external
-        onlyRewardsDistribution
-        updateReward(address(0))
-    {
+    function notifyRewardAmount(
+        uint256 reward
+    ) external onlyRewardsDistribution updateReward(address(0)) {
         if (block.timestamp >= periodFinish) {
             rewardRate = reward.div(rewardsDuration);
         } else {
@@ -242,10 +233,10 @@ contract StakingRewards is
     /// @dev May only be called by owner.
     /// @param tokenAddress Address of token to sweep.
     /// @param tokenAmount Amount of tokens to sweep.
-    function recoverERC20(address tokenAddress, uint256 tokenAmount)
-        external
-        onlyOwner
-    {
+    function recoverERC20(
+        address tokenAddress,
+        uint256 tokenAmount
+    ) external onlyOwner {
         require(
             tokenAddress != address(stakingToken),
             "Cannot withdraw the staking token"

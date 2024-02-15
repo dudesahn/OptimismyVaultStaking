@@ -1,7 +1,7 @@
 import brownie
 from brownie import ZERO_ADDRESS
 
-# test cloning our strategy, make sure the cloned strategy still works just fine by sending funds to it
+# test cloning our staking pool, make sure it works the same as a non-cloned one
 def test_cloning(
     StakingRewardsClonable,
     gov,

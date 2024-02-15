@@ -5,7 +5,11 @@ __pycache__
 build/
 reports/
 .env
-.DS_Store
+env
+venv
 
 # Node/npm
 node_modules/
+.DS_Store
+@openzeppelin/
+@yearnvaults/

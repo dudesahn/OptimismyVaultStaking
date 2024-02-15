@@ -46,10 +46,10 @@ contract StakingRewardsZapOld is Ownable {
 
     /* ========== MUTATIVE FUNCTIONS ========== */
 
-    function zapIn(address _targetVault, uint256 _underlyingAmount)
-        external
-        returns (uint256)
-    {
+    function zapIn(
+        address _targetVault,
+        uint256 _underlyingAmount
+    ) external returns (uint256) {
         // get our staking pool from our registry for this vault token
         IRegistry poolRegistry = IRegistry(stakingPoolRegistry);
 
@@ -91,10 +91,10 @@ contract StakingRewardsZapOld is Ownable {
     }
 
     /// @notice Use this in case someone accidentally sends tokens here.
-    function recoverERC20(address tokenAddress, uint256 tokenAmount)
-        external
-        onlyOwner
-    {
+    function recoverERC20(
+        address tokenAddress,
+        uint256 tokenAmount
+    ) external onlyOwner {
         IERC20(tokenAddress).safeTransfer(owner(), tokenAmount);
         emit Recovered(tokenAddress, tokenAmount);
     }

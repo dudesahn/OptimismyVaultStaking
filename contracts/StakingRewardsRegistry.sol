@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.15;
+pragma solidity 0.8.19;
 
-import "@openzeppelin_new/contracts/access/Ownable.sol";
+import {Ownable} from "@openzeppelin/contracts@4.9.3/access/Ownable.sol";
 
 interface IStakingRewards {
     function stakingToken() external view returns (address);
@@ -30,6 +30,9 @@ contract StakingRewardsRegistry is Ownable {
 
     /// @notice Check if an address can add pools to this registry.
     mapping(address => bool) public poolEndorsers;
+
+    /// @notice Staking pools that have been replaced by a newer version.
+    address[] public replacedStakingPools;
 
     /* ========== EVENTS ========== */
 
@@ -88,6 +91,9 @@ contract StakingRewardsRegistry is Ownable {
             address oldPool = stakingPool[_token];
             isStakingPoolEndorsed[oldPool] = false;
             stakingPool[_token] = _stakingPool;
+
+            // move our old pool to the replaced list
+            replacedStakingPools.push(oldPool);
         } else {
             require(
                 isRegistered[_token] == false,
@@ -110,10 +116,10 @@ contract StakingRewardsRegistry is Ownable {
     @param _addr The address to approve or deny access.
     @param _approved Allowed to endorse
      */
-    function setPoolEndorsers(address _addr, bool _approved)
-        external
-        onlyOwner
-    {
+    function setPoolEndorsers(
+        address _addr,
+        bool _approved
+    ) external onlyOwner {
         poolEndorsers[_addr] = _approved;
         emit ApprovedPoolEndorser(_addr, _approved);
     }
@@ -124,10 +130,10 @@ contract StakingRewardsRegistry is Ownable {
     @param _addr The address to approve or deny access.
     @param _approved Allowed to own staking pools
      */
-    function setApprovedPoolOwner(address _addr, bool _approved)
-        external
-        onlyOwner
-    {
+    function setApprovedPoolOwner(
+        address _addr,
+        bool _approved
+    ) external onlyOwner {
         approvedPoolOwner[_addr] = _approved;
         emit ApprovedPoolOwnerUpdated(_addr, _approved);
     }

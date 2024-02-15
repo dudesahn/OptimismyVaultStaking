@@ -221,10 +221,10 @@ contract StakingRewardsRegistry is Ownable {
     @param _addr The address to approve or deny access.
     @param _approved Allowed to endorse
      */
-    function setPoolEndorsers(address _addr, bool _approved)
-        external
-        onlyOwner
-    {
+    function setPoolEndorsers(
+        address _addr,
+        bool _approved
+    ) external onlyOwner {
         poolEndorsers[_addr] = _approved;
         emit ApprovedPoolEndorser(_addr, _approved);
     }
@@ -235,10 +235,10 @@ contract StakingRewardsRegistry is Ownable {
     @param _addr The address to approve or deny access.
     @param _approved Allowed to own staking pools
      */
-    function setApprovedPoolOwner(address _addr, bool _approved)
-        external
-        onlyOwner
-    {
+    function setApprovedPoolOwner(
+        address _addr,
+        bool _approved
+    ) external onlyOwner {
         approvedPoolOwner[_addr] = _approved;
         emit ApprovedPoolOwnerUpdated(_addr, _approved);
     }

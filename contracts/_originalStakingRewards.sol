@@ -91,12 +91,9 @@ contract StakingRewards is
 
     /* ========== MUTATIVE FUNCTIONS ========== */
 
-    function stake(uint256 amount)
-        external
-        nonReentrant
-        notPaused
-        updateReward(msg.sender)
-    {
+    function stake(
+        uint256 amount
+    ) external nonReentrant notPaused updateReward(msg.sender) {
         require(amount > 0, "Cannot stake 0");
         _totalSupply = _totalSupply.add(amount);
         _balances[msg.sender] = _balances[msg.sender].add(amount);
@@ -104,11 +101,9 @@ contract StakingRewards is
         emit Staked(msg.sender, amount);
     }
 
-    function withdraw(uint256 amount)
-        public
-        nonReentrant
-        updateReward(msg.sender)
-    {
+    function withdraw(
+        uint256 amount
+    ) public nonReentrant updateReward(msg.sender) {
         require(amount > 0, "Cannot withdraw 0");
         _totalSupply = _totalSupply.sub(amount);
         _balances[msg.sender] = _balances[msg.sender].sub(amount);
@@ -132,11 +127,9 @@ contract StakingRewards is
 
     /* ========== RESTRICTED FUNCTIONS ========== */
 
-    function notifyRewardAmount(uint256 reward)
-        external
-        onlyRewardsDistribution
-        updateReward(address(0))
-    {
+    function notifyRewardAmount(
+        uint256 reward
+    ) external onlyRewardsDistribution updateReward(address(0)) {
         if (block.timestamp >= periodFinish) {
             rewardRate = reward.div(rewardsDuration);
         } else {
@@ -161,10 +154,10 @@ contract StakingRewards is
     }
 
     // Added to support recovering LP Rewards from other systems such as BAL to be distributed to holders
-    function recoverERC20(address tokenAddress, uint256 tokenAmount)
-        external
-        onlyOwner
-    {
+    function recoverERC20(
+        address tokenAddress,
+        uint256 tokenAmount
+    ) external onlyOwner {
         require(
             tokenAddress != address(stakingToken),
             "Cannot withdraw the staking token"

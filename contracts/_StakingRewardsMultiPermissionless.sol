@@ -107,21 +107,17 @@ contract StakingRewardsMultiPermissionless is
     }
 
     /// @notice Either the current timestamp or end of the most recent period.
-    function lastTimeRewardApplicable(address _rewardsToken)
-        public
-        view
-        returns (uint256)
-    {
+    function lastTimeRewardApplicable(
+        address _rewardsToken
+    ) public view returns (uint256) {
         return
             Math.min(block.timestamp, rewardData[_rewardsToken].periodFinish);
     }
 
     /// @notice Reward paid out per whole token.
-    function rewardPerToken(address _rewardsToken)
-        public
-        view
-        returns (uint256)
-    {
+    function rewardPerToken(
+        address _rewardsToken
+    ) public view returns (uint256) {
         if (_totalSupply == 0) {
             return rewardData[_rewardsToken].rewardPerTokenStored;
         }
@@ -145,11 +141,10 @@ contract StakingRewardsMultiPermissionless is
      * @param _account Amount of vault tokens to deposit.
      * @param _rewardsToken Amount of vault tokens to deposit.
      */
-    function earned(address _account, address _rewardsToken)
-        public
-        view
-        returns (uint256)
-    {
+    function earned(
+        address _account,
+        address _rewardsToken
+    ) public view returns (uint256) {
         if (isRetired) {
             return 0;
         }
@@ -157,19 +152,17 @@ contract StakingRewardsMultiPermissionless is
         return
             _balances[_account]
                 .mul(
-                rewardPerToken(_rewardsToken).sub(
-                    userRewardPerTokenPaid[_account][_rewardsToken]
+                    rewardPerToken(_rewardsToken).sub(
+                        userRewardPerTokenPaid[_account][_rewardsToken]
+                    )
                 )
-            )
                 .div(1e18)
                 .add(rewards[_account][_rewardsToken]);
     }
 
-    function getRewardForDuration(address _rewardsToken)
-        external
-        view
-        returns (uint256)
-    {
+    function getRewardForDuration(
+        address _rewardsToken
+    ) external view returns (uint256) {
         return
             rewardData[_rewardsToken].rewardRate.mul(
                 rewardData[_rewardsToken].rewardsDuration
@@ -183,12 +176,9 @@ contract StakingRewardsMultiPermissionless is
      * @dev Can't stake zero.
      * @param _amount Amount of vault tokens to deposit.
      */
-    function stake(uint256 _amount)
-        external
-        nonReentrant
-        notPaused
-        updateReward(msg.sender)
-    {
+    function stake(
+        uint256 _amount
+    ) external nonReentrant notPaused updateReward(msg.sender) {
         require(_amount > 0, "Cannot stake 0");
         require(!isRetired, "Staking pool is retired");
         _totalSupply = _totalSupply.add(_amount);
@@ -203,12 +193,10 @@ contract StakingRewardsMultiPermissionless is
      * @param _recipient Address of user these vault tokens are being staked for.
      * @param _amount Amount of vault token to deposit.
      */
-    function stakeFor(address _recipient, uint256 _amount)
-        external
-        nonReentrant
-        notPaused
-        updateReward(_recipient)
-    {
+    function stakeFor(
+        address _recipient,
+        uint256 _amount
+    ) external nonReentrant notPaused updateReward(_recipient) {
         require(msg.sender == zapContract, "Only zap contract");
         require(_amount > 0, "Cannot stake 0");
         require(!isRetired, "Staking pool is retired");
@@ -223,11 +211,9 @@ contract StakingRewardsMultiPermissionless is
      * @dev Can't withdraw zero. If trying to claim, call getReward() instead.
      * @param _amount Amount of vault tokens to withdraw.
      */
-    function withdraw(uint256 _amount)
-        public
-        nonReentrant
-        updateReward(msg.sender)
-    {
+    function withdraw(
+        uint256 _amount
+    ) public nonReentrant updateReward(msg.sender) {
         require(_amount > 0, "Cannot withdraw 0");
         _totalSupply = _totalSupply.sub(_amount);
         _balances[msg.sender] = _balances[msg.sender].sub(_amount);
@@ -267,10 +253,10 @@ contract StakingRewardsMultiPermissionless is
      *  contract has not been retired.
      * @param _rewardAmount Amount of reward tokens to add.
      */
-    function notifyRewardAmount(address _rewardsToken, uint256 _rewardAmount)
-        external
-        updateReward(address(0))
-    {
+    function notifyRewardAmount(
+        address _rewardsToken,
+        uint256 _rewardAmount
+    ) external updateReward(address(0)) {
         if (isRetired) {
             revert("Staking pool is retired");
         }
@@ -288,10 +274,12 @@ contract StakingRewardsMultiPermissionless is
                 rewardData[_rewardsToken].rewardsDuration
             );
         } else {
-            uint256 remaining =
-                rewardData[_rewardsToken].periodFinish.sub(block.timestamp);
-            uint256 leftover =
-                remaining.mul(rewardData[_rewardsToken].rewardRate);
+            uint256 remaining = rewardData[_rewardsToken].periodFinish.sub(
+                block.timestamp
+            );
+            uint256 leftover = remaining.mul(
+                rewardData[_rewardsToken].rewardRate
+            );
             rewardData[_rewardsToken].rewardRate = _rewardAmount
                 .add(leftover)
                 .div(rewardData[_rewardsToken].rewardsDuration);
@@ -321,10 +309,10 @@ contract StakingRewardsMultiPermissionless is
      * @param _tokenAddress Address of token to sweep.
      * @param _tokenAmount Amount of tokens to sweep.
      */
-    function recoverERC20(address _tokenAddress, uint256 _tokenAmount)
-        external
-        onlyOwner
-    {
+    function recoverERC20(
+        address _tokenAddress,
+        uint256 _tokenAmount
+    ) external onlyOwner {
         if (_tokenAddress == address(stakingToken)) {
             revert("Cannot withdraw the staking token");
         }
@@ -335,8 +323,8 @@ contract StakingRewardsMultiPermissionless is
         uint256 maxPeriodFinish;
 
         for (uint256 i; i < _rewardTokens.length; ++i) {
-            uint256 rewardPeriodFinish =
-                rewardData[_rewardTokens[i]].periodFinish;
+            uint256 rewardPeriodFinish = rewardData[_rewardTokens[i]]
+                .periodFinish;
             if (rewardPeriodFinish > maxPeriodFinish) {
                 maxPeriodFinish = rewardPeriodFinish;
             }
@@ -365,9 +353,10 @@ contract StakingRewardsMultiPermissionless is
      * @dev May only be called by owner, and must be done after most recent period ends.
      * @param _rewardsDuration New length of period in seconds.
      */
-    function setRewardsDuration(address _rewardsToken, uint256 _rewardsDuration)
-        external
-    {
+    function setRewardsDuration(
+        address _rewardsToken,
+        uint256 _rewardsDuration
+    ) external {
         require(
             block.timestamp > rewardData[_rewardsToken].periodFinish,
             "Reward period still active"
