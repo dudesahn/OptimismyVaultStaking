@@ -10,7 +10,7 @@ import {Pausable} from "@openzeppelin/contracts@4.9.3/security/Pausable.sol";
  * @title Yearn Vault Staking MultiRewards
  * @author YearnFi
  * @notice Modified staking contract that allows users to deposit vault tokens and receive multiple different reward
- *  tokens, and also allows depositing straight from vault underlying via the StakingRewardsZap. Only the governance
+ *  tokens, and also allows depositing straight from vault underlying via the StakingRewardsZap. Only the owner
  *  role may add new reward tokens, or update rewardDistributor role of existing reward tokens.
  *
  *  This work builds on that of Synthetix (StakingRewards.sol) and CurveFi (MultiRewards.sol).
@@ -82,29 +82,29 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     /// @notice Will only be true on the original deployed contract and not on clones; we don't want to clone a clone.
     bool public isOriginal = true;
 
-    /// @notice Governance has all the power here. Can add rewards tokens, update zap contract, etc.
-    address public governance;
+    /// @notice Owner can add rewards tokens, update zap contract, etc.
+    address public owner;
 
-    /// @notice Governance transfer is a two-step process. Only the pendingGovernance address can accept new gov role.
-    address public pendingGovernance;
+    /// @notice Ownership transfer is a two-step process. Only the pendingOwner address can accept new owner role.
+    address public pendingOwner;
 
     /* ========== CONSTRUCTOR ========== */
 
-    constructor(address _gov, address _stakingToken, address _zapContract) {
-        _initializePool(_gov, _stakingToken, _zapContract);
+    constructor(address _owner, address _stakingToken, address _zapContract) {
+        _initializePool(_owner, _stakingToken, _zapContract);
     }
 
     /* ========== CLONING ========== */
 
     /**
      * @notice Use this to clone an exact copy of this staking pool.
-     * @param _gov Governance of the new staking contract.
+     * @param _owner Owner of the new staking contract.
      * @param _stakingToken Address of our staking token.
      * @param _zapContract Address of our zap contract.
      * @return newStakingPool Address of our new staking pool.
      */
     function cloneStakingPool(
-        address _gov,
+        address _owner,
         address _stakingToken,
         address _zapContract
     ) external returns (address newStakingPool) {
@@ -131,7 +131,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
         }
 
         StakingRewardsMulti(newStakingPool).initialize(
-            _gov,
+            _owner,
             _stakingToken,
             _zapContract
         );
@@ -142,21 +142,21 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     /**
      * @notice Initialize the staking pool.
      * @dev This should only be called by the clone function above.
-     * @param _gov Governance of the new staking contract.
+     * @param _owner Owner of the new staking contract.
      * @param _stakingToken Address of our staking token.
      * @param _zapContract Address of our zap contract.
      */
     function initialize(
-        address _gov,
+        address _owner,
         address _stakingToken,
         address _zapContract
     ) public {
-        _initializePool(_gov, _stakingToken, _zapContract);
+        _initializePool(_owner, _stakingToken, _zapContract);
     }
 
     // this is called by our original staking pool, as well as any clones via the above function
     function _initializePool(
-        address _gov,
+        address _owner,
         address _stakingToken,
         address _zapContract
     ) internal {
@@ -168,7 +168,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
         // set up our state vars
         stakingToken = IERC20(_stakingToken);
         zapContract = _zapContract;
-        governance = _gov;
+        owner = _owner;
     }
 
     /* ========== VIEWS ========== */
@@ -268,8 +268,8 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     function stake(
         uint256 _amount
     ) external nonReentrant whenNotPaused updateReward(msg.sender) {
-        require(_amount > 0, "Cannot stake 0");
-        require(!isRetired, "Staking pool is retired");
+        require(_amount > 0, "Must be >0");
+        require(!isRetired, "Pool retired");
 
         // add amount to total supply and user balance
         _totalSupply = _totalSupply + _amount;
@@ -290,9 +290,9 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
         address _recipient,
         uint256 _amount
     ) external nonReentrant whenNotPaused updateReward(_recipient) {
-        require(msg.sender == zapContract, "Only zap contract");
-        require(_amount > 0, "Cannot stake 0");
-        require(!isRetired, "Staking pool is retired");
+        require(msg.sender == zapContract, "!authorized");
+        require(_amount > 0, "Must be >0");
+        require(!isRetired, "Pool retired");
 
         // add amount to total supply and user balance
         _totalSupply = _totalSupply + _amount;
@@ -311,7 +311,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     function withdraw(
         uint256 _amount
     ) public nonReentrant updateReward(msg.sender) {
-        require(_amount > 0, "Cannot withdraw 0");
+        require(_amount > 0, "Must be >0");
 
         // remove amount from total supply and user balance
         _totalSupply = _totalSupply - _amount;
@@ -334,8 +334,8 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
         uint256 _amount,
         bool _exit
     ) external nonReentrant updateReward(_recipient) {
-        require(msg.sender == zapContract, "Only zap contract");
-        require(_amount > 0, "Cannot withdraw 0");
+        require(msg.sender == zapContract, "!authorized");
+        require(_amount > 0, "Must be >0");
 
         // remove amount from total supply and user balance
         _totalSupply = _totalSupply - _amount;
@@ -347,10 +347,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
 
         // claim rewards if exiting
         if (_exit) {
-            require(
-                _balances[_recipient] == 0,
-                "Must withdraw all when exiting"
-            );
+            require(_balances[_recipient] == 0, "Must withdraw all");
             _getRewardFor(_recipient);
         }
     }
@@ -414,7 +411,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     ) external updateReward(address(0)) {
         require(
             rewardData[_rewardsToken].rewardsDistributor == msg.sender,
-            "Rewards distro role"
+            "!authorized"
         );
 
         // handle the transfer of reward tokens via `transferFrom` to reduce the number
@@ -434,8 +431,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
                 block.timestamp;
             uint256 leftover = remaining * rewardData[_rewardsToken].rewardRate;
             rewardData[_rewardsToken].rewardRate =
-                _rewardAmount +
-                leftover /
+                (_rewardAmount + leftover) /
                 rewardData[_rewardsToken].rewardsDuration;
         }
 
@@ -446,7 +442,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
         uint256 balance = IERC20(_rewardsToken).balanceOf(address(this));
         require(
             rewardData[_rewardsToken].rewardRate <=
-                balance / rewardData[_rewardsToken].rewardsDuration,
+                (balance / rewardData[_rewardsToken].rewardsDuration),
             "Provided reward too high"
         );
 
@@ -459,7 +455,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
 
     /**
      * @notice Add a new reward token to the staking contract.
-     * @dev May only be called by gov, and can't be set to zero address. Add reward tokens sparingly, as each new one
+     * @dev May only be called by owner, and can't be set to zero address. Add reward tokens sparingly, as each new one
      *  will increase gas costs. This must be set before notifyRewardAmount can be used.
      * @param _rewardsToken Address of the rewards token.
      * @param _rewardsDistributor Address of the rewards distributor.
@@ -472,9 +468,9 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     ) external {
         require(
             _rewardsToken != address(0) && _rewardsDistributor != address(0),
-            "no zero address"
+            "No zero address"
         );
-        require(msg.sender == governance, "!authorized");
+        require(msg.sender == owner, "!authorized");
 
         require(rewardData[_rewardsToken].rewardsDuration == 0);
         rewardTokens.push(_rewardsToken);
@@ -484,7 +480,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
 
     /**
      * @notice Set rewards distributor address for a given reward token.
-     * @dev May only be called by gov, and can't be set to zero address.
+     * @dev May only be called by owner, and can't be set to zero address.
      * @param _rewardsToken Address of the rewards token.
      * @param _rewardsDistributor Address of the rewards distributor. This is the only address that can add new rewards
      *  for this token.
@@ -495,9 +491,9 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     ) external {
         require(
             _rewardsToken != address(0) && _rewardsDistributor != address(0),
-            "no zero address"
+            "No zero address"
         );
-        require(msg.sender == governance, "!authorized");
+        require(msg.sender == owner, "!authorized");
         rewardData[_rewardsToken].rewardsDistributor = _rewardsDistributor;
     }
 
@@ -513,9 +509,12 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     ) external {
         require(
             block.timestamp > rewardData[_rewardsToken].periodFinish,
-            "Rewards still active"
+            "Rewards active"
         );
-        require(rewardData[_rewardsToken].rewardsDistributor == msg.sender);
+        require(
+            rewardData[_rewardsToken].rewardsDistributor == msg.sender,
+            "!authorized"
+        );
         require(_rewardsDuration > 0, "Must be >0");
         rewardData[_rewardsToken].rewardsDuration = _rewardsDuration;
         emit RewardsDurationUpdated(
@@ -526,19 +525,41 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
 
     /**
      * @notice Set our zap contract.
-     * @dev May only be called by gov, and can't be set to zero address.
+     * @dev May only be called by owner, and can't be set to zero address.
      * @param _zapContract Address of the new zap contract.
      */
     function setZapContract(address _zapContract) external {
-        require(_zapContract != address(0), "no zero address");
-        require(msg.sender == governance, "!authorized");
+        require(_zapContract != address(0), "No zero address");
+        require(msg.sender == owner, "!authorized");
         zapContract = _zapContract;
         emit ZapContractUpdated(_zapContract);
     }
 
     /**
+     *  @notice Set our owner address. Step 1 of 2.
+     *  @dev May only be called by current owner role.
+     *  @param _owner Address of new owner.
+     */
+    function setOwner(address _owner) external {
+        require(msg.sender == owner, "!authorized");
+        pendingOwner = _owner;
+    }
+
+    /**
+     *  @notice Accept owner role from new owner address. Step 2 of 2.
+     *  @dev May only be called by current pendingOwner role.
+     */
+    function acceptOwner() external {
+        address _pendingOwner = pendingOwner;
+        require(msg.sender == _pendingOwner, "!authorized");
+        owner = _pendingOwner;
+        pendingOwner = address(0);
+        emit OwnerUpdated(_pendingOwner);
+    }
+
+    /**
      * @notice Sweep out tokens accidentally sent here.
-     * @dev May only be called by gov. If a pool has multiple rewards tokens to sweep out, call this once for each.
+     * @dev May only be called by owner. If a pool has multiple rewards tokens to sweep out, call this once for each.
      * @param _tokenAddress Address of token to sweep.
      * @param _tokenAmount Amount of tokens to sweep.
      */
@@ -547,9 +568,9 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
         uint256 _tokenAmount
     ) external {
         if (_tokenAddress == address(stakingToken)) {
-            revert("Cannot withdraw the staking token");
+            revert("!staking token");
         }
-        require(msg.sender == governance, "!authorized");
+        require(msg.sender == owner, "!authorized");
 
         // can only recover reward tokens 90 days after last reward token ends
         bool isRewardToken;
@@ -571,7 +592,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
         if (isRewardToken) {
             require(
                 block.timestamp > maxPeriodFinish + 90 days,
-                "wait 90 days to sweep leftover rewards"
+                "wait >90 days"
             );
 
             // if we do this, automatically sweep all reward token
@@ -581,30 +602,8 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
             isRetired = true;
         }
 
-        IERC20(_tokenAddress).safeTransfer(governance, _tokenAmount);
+        IERC20(_tokenAddress).safeTransfer(owner, _tokenAmount);
         emit Recovered(_tokenAddress, _tokenAmount);
-    }
-
-    /**
-     *  @notice Set our governance address. Step 1 of 2.
-     *  @dev May only be called by current governance role.
-     *  @param _governance Address of new governance.
-     */
-    function setGovernance(address _governance) external {
-        require(msg.sender == governance, "!authorized");
-        pendingGovernance = _governance;
-    }
-
-    /**
-     *  @notice Accept governance role from new governance address. Step 2 of 2.
-     *  @dev May only be called by current pendingGovernance role.
-     */
-    function acceptGovernance() external {
-        address _pendingGovernance = pendingGovernance;
-        require(msg.sender == _pendingGovernance, "!authorized");
-        governance = _pendingGovernance;
-        pendingGovernance = address(0);
-        emit GovernanceUpdated(_pendingGovernance);
     }
 
     /* ========== MODIFIERS ========== */
@@ -638,6 +637,6 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     event RewardsDurationUpdated(address token, uint256 newDuration);
     event ZapContractUpdated(address _zapContract);
     event Recovered(address token, uint256 amount);
-    event GovernanceUpdated(address indexed goverance);
+    event OwnerUpdated(address indexed Ownererance);
     event Cloned(address indexed clone);
 }

@@ -36,7 +36,7 @@ def yvdai():
 
 @pytest.fixture(scope="session")
 def yvdai_amount(yvdai):
-    yvdai_amount = 1_000 * 10 ** yvdai.decimals()
+    yvdai_amount = 100 * 10 ** yvdai.decimals()
     yield yvdai_amount
 
 
@@ -56,7 +56,7 @@ def yvmkusd():
 
 @pytest.fixture(scope="session")
 def yvmkusd_amount(yvmkusd):
-    yvmkusd_amount = 1_000 * 10 ** yvmkusd.decimals()
+    yvmkusd_amount = 100 * 10 ** yvmkusd.decimals()
     yield yvmkusd_amount
 
 
