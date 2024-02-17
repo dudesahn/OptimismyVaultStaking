@@ -87,6 +87,154 @@ def test_basic_operation(
     yvdai_pool.setRewardsDuration(ajna, 86400 * 14, {"from": ajna_whale})
     assert dai.balanceOf(zap) == 0
 
+    # do a bit more setter testing
+
+    # rewards distro
+    with brownie.reverts("No zero address"):
+        yvdai_pool.setRewardsDistributor(ZERO_ADDRESS, gov, {"from": gov})
+    with brownie.reverts("No zero address"):
+        yvdai_pool.setRewardsDistributor(ajna, ZERO_ADDRESS, {"from": gov})
+    with brownie.reverts("!authorized"):
+        yvdai_pool.setRewardsDistributor(ajna, gov, {"from": ajna_whale})
+    yvdai_pool.setRewardsDistributor(ajna, gov, {"from": gov})
+    assert yvdai_pool.rewardData(ajna)["rewardsDistributor"] == gov.address
+
+    # ownership
+    assert yvdai_pool.pendingOwner() == ZERO_ADDRESS
+    with brownie.reverts("!authorized"):
+        yvdai_pool.setPendingOwner(ajna_whale, {"from": ajna_whale})
+    yvdai_pool.setPendingOwner(ajna_whale, {"from": gov})
+    assert yvdai_pool.pendingOwner() == ajna_whale.address
+    assert yvdai_pool.owner() == gov.address
+    with brownie.reverts("!authorized"):
+        yvdai_pool.acceptOwner({"from": gov})
+    yvdai_pool.acceptOwner({"from": ajna_whale})
+    assert yvdai_pool.owner() == ajna_whale.address
+    assert yvdai_pool.pendingOwner() == ZERO_ADDRESS
+
+
+def test_cloning(
+    gov,
+    yvdai,
+    yvdai_amount,
+    yvdai_whale,
+    yvmkusd,
+    yvmkusd_amount,
+    yvmkusd_whale,
+    ajna,
+    ajna_amount,
+    ajna_whale,
+    registry,
+    zap,
+    yvdai_pool,
+    yvmkusd_pool,
+    dai,
+    StakingRewardsMulti,
+):
+
+    # Shouldn't be able to call initialize again
+    with brownie.reverts():
+        yvdai_pool.initialize(
+            gov.address,
+            yvdai.address,
+            zap.address,
+            {"from": gov},
+        )
+    tx = yvdai_pool.cloneStakingPool(
+        gov.address,
+        yvdai.address,
+        zap.address,
+        {"from": gov},
+    )
+
+    new_staking_pool = StakingRewardsMulti.at(tx.return_value)
+
+    # Shouldn't be able to call initialize again
+    with brownie.reverts():
+        new_staking_pool.initialize(
+            gov.address,
+            yvdai.address,
+            zap.address,
+            {"from": gov},
+        )
+
+    ## shouldn't be able to clone a clone
+    with brownie.reverts():
+        new_staking_pool.cloneStakingPool(
+            gov.address,
+            yvdai.address,
+            zap.address,
+            {"from": gov},
+        )
+
+    # check owner is correct
+    assert new_staking_pool.owner() == gov.address
+
+    # Approve and deposit to the staking contract
+    yvdai_starting = yvdai.balanceOf(yvdai_whale)
+    yvdai.approve(yvdai_pool, 2**256 - 1, {"from": yvdai_whale})
+    yvdai_pool.stake(yvdai_amount, {"from": yvdai_whale})
+    assert yvdai_pool.balanceOf(yvdai_whale) == yvdai_amount
+
+    # can't stake zero
+    with brownie.reverts("Must be >0"):
+        yvdai_pool.stake(0, {"from": yvdai_whale})
+
+    # whale notifies rewards, but only after gov adds token and whale as rewards distro
+    # will revert if tried before token is added
+    with brownie.reverts():
+        yvdai_pool.notifyRewardAmount(ajna, ajna_amount, {"from": ajna_whale})
+
+    # add ajna and grant role to whale
+    week = 7 * 86400
+    yvdai_pool.addReward(ajna, ajna_whale, week, {"from": gov})
+
+    # now we should be able to notify (make sure we've already done approvals though!)
+    before = ajna.balanceOf(ajna_whale)
+    ajna.approve(yvdai_pool, 2**256 - 1, {"from": ajna_whale})
+    yvdai_pool.notifyRewardAmount(ajna, ajna_amount, {"from": ajna_whale})
+    assert before == ajna.balanceOf(ajna_whale) + ajna_amount
+
+    # sleep to gain some earnings
+    chain.sleep(86400)
+    chain.mine(1)
+
+    # check claimable earnings, get reward
+    assert yvdai_pool.getRewardForDuration(ajna) > 0
+    earned = yvdai_pool.earned(yvdai_whale, ajna)
+    assert earned > 0
+    yvdai_pool.getReward({"from": yvdai_whale})
+    assert ajna.balanceOf(yvdai_whale) >= earned
+
+    # sleep to gain some earnings
+    chain.sleep(86400)
+    chain.mine(1)
+
+    # can't withdraw zero
+    with brownie.reverts("Must be >0"):
+        yvdai_pool.withdraw(0, {"from": yvdai_whale})
+
+    # exit, check that we have the same principal and earned more rewards
+    yvdai_pool.exit({"from": yvdai_whale})
+    assert yvdai_starting == yvdai.balanceOf(yvdai_whale)
+    assert ajna.balanceOf(yvdai_whale) > earned
+
+    # check our setters
+    with brownie.reverts("Rewards active"):
+        yvdai_pool.setRewardsDuration(ajna, 100e18, {"from": ajna_whale})
+    with brownie.reverts("No zero address"):
+        yvdai_pool.setZapContract(ZERO_ADDRESS, {"from": gov})
+    yvdai_pool.setZapContract(zap, {"from": gov})
+
+    # sleep to get past our rewards window
+    chain.sleep(86400 * 6)
+    with brownie.reverts("Must be >0"):
+        yvdai_pool.setRewardsDuration(ajna, 0, {"from": ajna_whale})
+    with brownie.reverts("!authorized"):
+        yvdai_pool.setRewardsDuration(ajna, 100e18, {"from": gov})
+    yvdai_pool.setRewardsDuration(ajna, 86400 * 14, {"from": ajna_whale})
+    assert dai.balanceOf(zap) == 0
+
 
 def test_multiple_rewards(
     gov,
@@ -746,7 +894,7 @@ def test_registry(
         registry.addStakingPool(yvmkusd_pool, yvdai, False, {"from": gov})
 
     # can't replace a pool that hasn't been added yet
-    with brownie.reverts():
+    with brownie.reverts("token isn't registered, can't replace"):
         registry.addStakingPool(yvmkusd_pool, yvmkusd, True, {"from": gov})
 
     # can't add another pool for the same underlying without replacing
@@ -767,8 +915,6 @@ def test_registry(
     # replace instead of adding
     registry.addStakingPool(yvdai_pool_too, yvdai, True, {"from": gov})
     assert registry.stakingPool(yvdai.address) == yvdai_pool_too.address
-
-    # ADD SOMETHING HERE TO TEST CLONING FROM THE REGISTRY DIRECTLY; NEED TO setDefaultContracts FIRST
 
     # make sure we can't add one with incorrect gov
     yvdai_pool_three = strategist.deploy(
@@ -798,8 +944,26 @@ def test_registry(
     assert registry.isRegistered(yvmkusd.address) == False
     assert registry.isStakingPoolEndorsed(yvmkusd_pool) == False
 
-    # add yvmkusd
-    registry.addStakingPool(yvmkusd_pool, yvmkusd, False, {"from": gov})
+    # deploy yvmkusd via registry cloning
+    # will revert without stakingContract set
+    with brownie.reverts():
+        registry.cloneAndAddStakingPool(yvmkusd, {"from": gov})
+
+    # only owner can set default contracts
+    with brownie.reverts():
+        registry.setDefaultContracts(yvdai_pool, zap, {"from": yvdai_whale})
+
+    registry.setDefaultContracts(yvdai_pool, zap, {"from": gov})
+
+    # only pool endorsers can set
+    with brownie.reverts("!authorized"):
+        registry.cloneAndAddStakingPool(yvmkusd, {"from": yvdai_whale})
+
+    # clone and add
+    registry.cloneAndAddStakingPool(yvmkusd, {"from": gov})
+
+    # add first yvmkusd staking as replacement
+    registry.addStakingPool(yvmkusd_pool, yvmkusd, True, {"from": gov})
     assert registry.numTokens() == 2
     assert registry.isStakingPoolEndorsed(yvmkusd_pool) == True
     assert registry.isRegistered(yvmkusd.address) == True
