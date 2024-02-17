@@ -1,7 +1,9 @@
 import brownie
+import pytest
 from brownie import ZERO_ADDRESS
 
 # test cloning our staking pool, make sure it works the same as a non-cloned one
+@pytest.mark.skip_coverage
 def test_cloning(
     StakingRewardsClonable,
     gov,

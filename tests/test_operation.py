@@ -350,7 +350,7 @@ def test_sweep_rewards(
     ajna_amount,
     ajna_whale,
     registry,
-    legacy_zap,
+    zap,
     yvdai_pool,
     yvmkusd_pool,
     dai,
@@ -442,9 +442,9 @@ def test_sweep_rewards(
     with brownie.reverts("Pool retired"):
         yvdai_pool.stake(yvdai_amount, {"from": yvdai_whale})
     registry.addStakingPool(yvdai_pool, yvdai, False, {"from": gov})
-    dai.approve(legacy_zap, 2**256 - 1, {"from": dai_whale})
+    dai.approve(zap, 2**256 - 1, {"from": dai_whale})
     with brownie.reverts("Pool retired"):
-        legacy_zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
+        zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
 
 
 def test_extend_rewards(
@@ -558,43 +558,43 @@ def test_zap_in(
     ajna_amount,
     ajna_whale,
     registry,
-    legacy_zap,
+    zap,
     yvdai_pool,
     yvmkusd_pool,
     RELATIVE_APPROX,
 ):
     # Approve and zap into to the staking contract
     dai_starting = dai.balanceOf(dai_whale)
-    dai.approve(legacy_zap, 2**256 - 1, {"from": dai_whale})
+    dai.approve(zap, 2**256 - 1, {"from": dai_whale})
 
     # can't deposit into a contract that isn't in our registry
     with brownie.reverts("staking pool doesn't exist"):
-        legacy_zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
+        zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
 
     # can't zap into zero address (vault deposit() step will fail)
     with brownie.reverts():
-        legacy_zap.zapInLegacy(ZERO_ADDRESS, dai_amount, {"from": dai_whale})
+        zap.zapInLegacy(ZERO_ADDRESS, dai_amount, {"from": dai_whale})
 
     # Add our staking contract to our registry
     registry.addStakingPool(yvdai_pool, yvdai, False, {"from": gov})
 
     # need to pretend to stakeFor directly from zap contract to hit the require
     with brownie.reverts("Must be >0"):
-        yvdai_pool.stakeFor(dai_whale, 0, {"from": legacy_zap})
+        yvdai_pool.stakeFor(dai_whale, 0, {"from": zap})
 
     # zap in, but can't zap zero
     with brownie.reverts():
-        legacy_zap.zapInLegacy(yvdai, 0, {"from": dai_whale})
-    legacy_zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
+        zap.zapInLegacy(yvdai, 0, {"from": dai_whale})
+    zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
     balance = yvdai_pool.balanceOf(dai_whale)
     assert balance > 0
     print("Staked balance of yvDAI, should be ~1000:", balance / 1e18)
 
     # check that our zap has zero balance
-    zap_balance = yvdai_pool.balanceOf(legacy_zap)
+    zap_balance = yvdai_pool.balanceOf(zap)
     assert zap_balance == 0
     with brownie.reverts():
-        yvdai_pool.withdraw(100e18, {"from": legacy_zap})
+        yvdai_pool.withdraw(100e18, {"from": zap})
 
     # add ajna and grant role to whale
     week = 7 * 86400
@@ -609,7 +609,7 @@ def test_zap_in(
     # no problem to zap in a bit more
     chain.sleep(1)
     chain.mine(1)
-    legacy_zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
+    zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
 
     # sleep to gain some earnings
     chain.sleep(86400)
@@ -638,9 +638,9 @@ def test_zap_in(
         yvdai_pool.stakeFor(gov, 100e18, {"from": gov})
 
     # zero address for registry will revert on zap in
-    legacy_zap.setPoolRegistry(ZERO_ADDRESS, {"from": gov})
+    zap.setPoolRegistry(ZERO_ADDRESS, {"from": gov})
     with brownie.reverts():
-        legacy_zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
+        zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
 
 
 def test_zap_out(
@@ -658,7 +658,7 @@ def test_zap_out(
     ajna_amount,
     ajna_whale,
     registry,
-    legacy_zap,
+    zap,
     yvdai_pool,
     yvmkusd_pool,
     RELATIVE_APPROX,
@@ -698,7 +698,7 @@ def test_zap_out(
 
     # zap out (exit) check that we have the same principal and earned more rewards
     dai_balance = dai.balanceOf(yvdai_whale)
-    legacy_zap.zapOutLegacy(yvdai, yvdai_amount, True, {"from": yvdai_whale})
+    zap.zapOutLegacy(yvdai, yvdai_amount, True, {"from": yvdai_whale})
     dai_out = dai.balanceOf(yvdai_whale) - dai_balance
     print(
         "yvDAI In * PPS:",
@@ -753,8 +753,6 @@ def test_registry(
     yvdai_pool_too = gov.deploy(
         StakingRewardsMulti,
         gov.address,
-        gov.address,
-        ajna.address,
         yvdai.address,
         zap.address,
     )
@@ -770,12 +768,12 @@ def test_registry(
     registry.addStakingPool(yvdai_pool_too, yvdai, True, {"from": gov})
     assert registry.stakingPool(yvdai.address) == yvdai_pool_too.address
 
+    # ADD SOMETHING HERE TO TEST CLONING FROM THE REGISTRY DIRECTLY; NEED TO setDefaultContracts FIRST
+
     # make sure we can't add one with incorrect gov
     yvdai_pool_three = strategist.deploy(
         StakingRewardsMulti,
         strategist.address,
-        strategist.address,
-        ajna.address,
         yvdai.address,
         zap.address,
     )

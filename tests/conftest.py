@@ -169,18 +169,12 @@ def zap(StakingRewardsZap, gov, registry):
 
 
 @pytest.fixture
-def legacy_zap(StakingRewardsZapLegacy, gov, registry):
-    legacy_zap = gov.deploy(StakingRewardsZapLegacy, registry)
-    yield legacy_zap
-
-
-@pytest.fixture
-def yvdai_pool(StakingRewardsMulti, gov, yvdai, legacy_zap):
+def yvdai_pool(StakingRewardsMulti, gov, yvdai, zap):
     yvdai_pool = gov.deploy(
         StakingRewardsMulti,
         gov.address,
         yvdai.address,
-        legacy_zap.address,
+        zap.address,
     )
     yield yvdai_pool
 

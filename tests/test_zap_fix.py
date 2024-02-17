@@ -3,6 +3,7 @@ from brownie import ZERO_ADDRESS, chain, interface
 import pytest
 
 # this shows that, in prod, the current live zap will have dai stuck
+@pytest.mark.skip_coverage
 def test_old_live_zap_fails(
     gov,
     yvdai,
@@ -43,6 +44,7 @@ def test_old_live_zap_fails(
 
 
 # this shows that our new zap, when deployed and used with existing pool contracts, works great
+@pytest.mark.skip_coverage
 def test_new_zap_works(
     gov,
     yvdai,

@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.19;
 
-import {Ownable} from "@openzeppelin/contracts@4.9.3/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts@4.9.3/access/Ownable2Step.sol";
 
 interface IStakingRewards {
     function stakingToken() external view returns (address);
 
     function owner() external view returns (address);
+
+    function cloneStakingPool(
+        address _owner,
+        address _stakingToken,
+        address _zapContract
+    ) external returns (address newStakingPool);
 }
 
-contract StakingRewardsRegistry is Ownable {
+contract StakingRewardsRegistry is Ownable2Step {
     /* ========== STATE VARIABLES ========== */
 
     /// @notice If a stakingPool exists for a given token, it will be shown here.
@@ -34,11 +40,18 @@ contract StakingRewardsRegistry is Ownable {
     /// @notice Staking pools that have been replaced by a newer version.
     address[] public replacedStakingPools;
 
+    /// @notice Default StakingRewardsMulti contract to clone.
+    address public stakingContract;
+
+    /// @notice Default zap contract.
+    address public zapContract;
+
     /* ========== EVENTS ========== */
 
-    event StakingPoolAdded(address indexed token, address indexed stakingPool);
+    event StakingPoolAdded(address indexed token, address stakingPool);
     event ApprovedPoolOwnerUpdated(address governance, bool approved);
     event ApprovedPoolEndorser(address account, bool canEndorse);
+    event DefaultContractsUpdated(address stakingContract, address zapContract);
 
     /* ========== VIEWS ========== */
 
@@ -48,6 +61,34 @@ contract StakingRewardsRegistry is Ownable {
     }
 
     /* ========== CORE FUNCTIONS ========== */
+
+    /**
+     @notice Used for owner to clone an exact copy of the default staking pool and add to registry.
+     @dev Also uses the default zap contract.
+     @param _stakingToken Address of our staking token to use.
+    */
+    function cloneAndAddStakingPool(
+        address _stakingToken
+    ) external returns (address newStakingPool) {
+        // don't let just anyone add to our registry
+        require(poolEndorsers[msg.sender], "unauthorized");
+
+        // Clone new pool.
+        IStakingRewards stakingRewards = IStakingRewards(stakingContract);
+
+        newStakingPool = stakingRewards.cloneStakingPool(
+            owner(),
+            _stakingToken,
+            zapContract
+        );
+
+        // Add to the registry.
+        _addStakingPool(
+            newStakingPool,
+            _stakingToken,
+            isRegistered[_stakingToken]
+        );
+    }
 
     /**
     @notice
@@ -68,7 +109,14 @@ contract StakingRewardsRegistry is Ownable {
     ) external {
         // don't let just anyone add to our registry
         require(poolEndorsers[msg.sender], "unauthorized");
+        _addStakingPool(_stakingPool, _token, _replaceExistingPool);
+    }
 
+    function _addStakingPool(
+        address _stakingPool,
+        address _token,
+        bool _replaceExistingPool
+    ) internal {
         // load up the staking pool contract
         IStakingRewards stakingRewards = IStakingRewards(_stakingPool);
 
@@ -125,7 +173,7 @@ contract StakingRewardsRegistry is Ownable {
     }
 
     /**
-    @notice Set the staking pool owners
+    @notice Set the staking pool owners.
     @dev Throws if caller is not owner.
     @param _addr The address to approve or deny access.
     @param _approved Allowed to own staking pools
@@ -136,5 +184,24 @@ contract StakingRewardsRegistry is Ownable {
     ) external onlyOwner {
         approvedPoolOwner[_addr] = _approved;
         emit ApprovedPoolOwnerUpdated(_addr, _approved);
+    }
+
+    /**
+    @notice Set our default zap and staking pool contracts.
+    @dev Throws if caller is not owner, and can't be set to zero address.
+    @param _stakingPool Address of the default staking contract to use.
+    @param _zapContract Address of the default zap contract to use.
+     */
+    function setDefaultContracts(
+        address _stakingPool,
+        address _zapContract
+    ) external onlyOwner {
+        require(
+            _stakingPool != address(0) && _zapContract != address(0),
+            "no zero address"
+        );
+        stakingContract = _stakingPool;
+        zapContract = _zapContract;
+        emit DefaultContractsUpdated(_stakingPool, _zapContract);
     }
 }
