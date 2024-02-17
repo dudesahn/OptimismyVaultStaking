@@ -19,11 +19,5 @@ compiler:
 
 reports:
   exclude_contracts:
-    - Owned
-    - Pausable
-    - RewardsDistributionRecipient
-    - IStakingRewards
-    - SafeMath
-    - SafeERC20
-    - Ownable
     - Address
+    - SafeERC20

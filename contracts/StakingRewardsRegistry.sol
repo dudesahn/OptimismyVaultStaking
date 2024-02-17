@@ -71,7 +71,7 @@ contract StakingRewardsRegistry is Ownable2Step {
         address _stakingToken
     ) external returns (address newStakingPool) {
         // don't let just anyone add to our registry
-        require(poolEndorsers[msg.sender], "unauthorized");
+        require(poolEndorsers[msg.sender], "!authorized");
 
         // Clone new pool.
         IStakingRewards stakingRewards = IStakingRewards(stakingContract);
@@ -108,7 +108,7 @@ contract StakingRewardsRegistry is Ownable2Step {
         bool _replaceExistingPool
     ) external {
         // don't let just anyone add to our registry
-        require(poolEndorsers[msg.sender], "unauthorized");
+        require(poolEndorsers[msg.sender], "!authorized");
         _addStakingPool(_stakingPool, _token, _replaceExistingPool);
     }
 

@@ -362,7 +362,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
 
     // internal function to get rewards.
     function _getRewardFor(address _recipient) internal {
-        for (uint256 i; i < rewardTokens.length; i++) {
+        for (uint256 i; i < rewardTokens.length; ++i) {
             address _rewardsToken = rewardTokens[i];
             uint256 reward = rewards[_recipient][_rewardsToken];
             if (reward > 0) {
@@ -395,6 +395,27 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     function exit() external {
         withdraw(_balances[msg.sender]);
         _getRewardFor(msg.sender);
+    }
+
+    /**
+     * @notice Withdraw all of a user's vault tokens from the staking pool.
+     * @dev Waives right to claim all pending rewards. Should only be used if something breaks with reward logic.
+     */
+    function emergencyExit() external nonReentrant {
+        // remove amount from total supply and user balance
+        uint256 amount = _balances[msg.sender];
+        _totalSupply = _totalSupply - amount;
+        _balances[msg.sender] = 0;
+
+        // set rewards to zero
+        for (uint256 i; i < rewardTokens.length; ++i) {
+            address _rewardsToken = rewardTokens[i];
+            rewards[msg.sender][_rewardsToken] = 0;
+        }
+
+        // send the requested amount, emit the event
+        stakingToken.safeTransfer(msg.sender, amount);
+        emit Withdrawn(msg.sender, amount);
     }
 
     /* ========== RESTRICTED FUNCTIONS ========== */
@@ -536,11 +557,11 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     }
 
     /**
-     *  @notice Set our owner address. Step 1 of 2.
+     *  @notice Set our pending owner address. Step 1 of 2.
      *  @dev May only be called by current owner role.
      *  @param _owner Address of new owner.
      */
-    function setOwner(address _owner) external {
+    function setPendingOwner(address _owner) external {
         require(msg.sender == owner, "!authorized");
         pendingOwner = _owner;
     }
@@ -609,7 +630,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     /* ========== MODIFIERS ========== */
 
     modifier updateReward(address _account) {
-        for (uint256 i; i < rewardTokens.length; i++) {
+        for (uint256 i; i < rewardTokens.length; ++i) {
             address token = rewardTokens[i];
             rewardData[token].rewardPerTokenStored = rewardPerToken(token);
             rewardData[token].lastUpdateTime = lastTimeRewardApplicable(token);
