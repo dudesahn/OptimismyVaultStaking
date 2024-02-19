@@ -93,6 +93,8 @@ contract StakingRewardsZap is Ownable {
 
         // transfer to zap and deposit underlying to vault, but first check our approvals and store starting amount
         _checkAllowance(_targetVault, address(underlying), _underlyingAmount);
+
+        // Review: when would beforeAmount be != 0?
         uint256 beforeAmount = underlying.balanceOf(address(this));
         underlying.transferFrom(msg.sender, address(this), _underlyingAmount);
 
@@ -178,12 +180,15 @@ contract StakingRewardsZap is Ownable {
         require(_vaultStakingPool != address(0), "staking pool doesn't exist");
         IStakingRewards vaultStakingPool = IStakingRewards(_vaultStakingPool);
 
+        // REVIEW: Comment is wrong.
         // transfer to zap and deposit underlying to vault, but first check our approvals and store starting amount
         vaultStakingPool.withdrawFor(msg.sender, _vaultTokenAmount, _exit);
 
         // get our underlying token
         IVault targetVault = IVault(_vault);
         IERC20 underlying = IERC20(targetVault.asset());
+
+        // REVIEW: When beforeAmount would be != 0?
         uint256 beforeAmount = underlying.balanceOf(address(this));
         underlyingAmount = targetVault.redeem(
             _vaultTokenAmount,
@@ -195,6 +200,7 @@ contract StakingRewardsZap is Ownable {
         // and/or unstaked all we meant to
 
         // this shouldn't be reached thanks to vault checks, but leave it in case vault code changes
+        // REVIEW: I would kill this code.
         require(
             underlying.balanceOf(address(this)) > beforeAmount &&
                 targetVault.balanceOf(address(this)) == 0,
