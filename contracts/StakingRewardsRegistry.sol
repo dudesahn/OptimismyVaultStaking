@@ -26,6 +26,9 @@ contract StakingRewardsRegistry is Ownable2Step {
     address[] public tokens;
 
     /// @notice Check if an stakingPool exists for a given vault token.
+
+    // REVIEW: can't you avoid this variable and convert it to a method which does
+    // return stakingPool[token] != ZERO_ADDRESS
     mapping(address => bool) public isRegistered;
 
     /// @notice Check if an address is allowed to own stakingPools from this registry.
@@ -164,10 +167,14 @@ contract StakingRewardsRegistry is Ownable2Step {
     @param _addr The address to approve or deny access.
     @param _approved Allowed to endorse
      */
+
+    // REVIEW: this sounds like you are setting the full list.
+    // Better options: setPoolEndorser()
     function setPoolEndorsers(
         address _addr,
         bool _approved
     ) external onlyOwner {
+        // REVIEW delete is the same as setting the value to False?
         poolEndorsers[_addr] = _approved;
         emit ApprovedPoolEndorser(_addr, _approved);
     }
