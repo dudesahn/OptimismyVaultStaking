@@ -88,6 +88,9 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     /// @notice Ownership transfer is a two-step process. Only the pendingOwner address can accept new owner role.
     address public pendingOwner;
 
+    /// @notice Used to track the deployed version of this contract.
+    string public constant stakerVersion = "1.0.0";
+
     /* ========== CONSTRUCTOR ========== */
 
     constructor(address _owner, address _stakingToken, address _zapContract) {
@@ -246,7 +249,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
     }
 
     /**
-     * @notice Reward that will be paid out over the remaining reward duration.
+     * @notice Total reward that will be paid out over the reward duration.
      * @param _rewardsToken Reward token to check.
      * @return Total reward token remaining to be paid out.
      */
@@ -282,7 +285,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
 
     /**
      * @notice Deposit vault tokens for specified recipient.
-     * @dev Can't stake zero, can only be used by zap contract.
+     * @dev Can't stake zero.
      * @param _recipient Address of user these vault tokens are being staked for.
      * @param _amount Amount of vault token to deposit.
      */
@@ -290,7 +293,6 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
         address _recipient,
         uint256 _amount
     ) external nonReentrant whenNotPaused updateReward(_recipient) {
-        require(msg.sender == zapContract, "!authorized");
         require(_amount > 0, "Must be >0");
         require(!isRetired, "Pool retired");
 
@@ -434,6 +436,7 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
             rewardData[_rewardsToken].rewardsDistributor == msg.sender,
             "!authorized"
         );
+        require(_rewardAmount > 0, "Must be >0");
 
         // handle the transfer of reward tokens via `transferFrom` to reduce the number
         // of transactions required and ensure correctness of the reward amount
@@ -492,8 +495,12 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
             "No zero address"
         );
         require(msg.sender == owner, "!authorized");
+        require(_rewardsDuration > 0, "Must be >0");
+        require(
+            rewardData[_rewardsToken].rewardsDuration == 0,
+            "Reward already added"
+        );
 
-        require(rewardData[_rewardsToken].rewardsDuration == 0);
         rewardTokens.push(_rewardsToken);
         rewardData[_rewardsToken].rewardsDistributor = _rewardsDistributor;
         rewardData[_rewardsToken].rewardsDuration = _rewardsDuration;
