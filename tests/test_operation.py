@@ -1,5 +1,5 @@
 import brownie
-from brownie import ZERO_ADDRESS, chain, interface
+from brownie import ZERO_ADDRESS, chain, interface, accounts
 import pytest
 
 # things to add: test that the view amounts are correct. test user claims for multiple tokens. test zap out.
@@ -21,8 +21,10 @@ def test_basic_operation(
     yvdai_pool,
     yvmkusd_pool,
     dai,
+    RELATIVE_APPROX,
 ):
     # Approve and deposit to the staking contract
+    week = 7 * 86400
     yvdai_starting = yvdai.balanceOf(yvdai_whale)
     yvdai.approve(yvdai_pool, 2**256 - 1, {"from": yvdai_whale})
     yvdai_pool.stake(yvdai_amount, {"from": yvdai_whale})
@@ -37,15 +39,39 @@ def test_basic_operation(
     with brownie.reverts():
         yvdai_pool.notifyRewardAmount(ajna, ajna_amount, {"from": ajna_whale})
 
+    with brownie.reverts("!authorized"):
+        yvdai_pool.addReward(ajna, ajna_whale, week, {"from": ajna_whale})
+
     # add ajna and grant role to whale
-    week = 7 * 86400
     yvdai_pool.addReward(ajna, ajna_whale, week, {"from": gov})
+
+    with brownie.reverts("No zero address"):
+        yvdai_pool.addReward(ZERO_ADDRESS, ajna_whale, week, {"from": gov})
+
+    with brownie.reverts("No zero address"):
+        yvdai_pool.addReward(ajna, ZERO_ADDRESS, week, {"from": gov})
+
+    with brownie.reverts("Must be >0"):
+        yvdai_pool.addReward(ajna, ajna_whale, 0, {"from": gov})
+
+    with brownie.reverts("Reward already added"):
+        yvdai_pool.addReward(ajna, ajna_whale, week, {"from": gov})
 
     # now we should be able to notify (make sure we've already done approvals though!)
     before = ajna.balanceOf(ajna_whale)
     ajna.approve(yvdai_pool, 2**256 - 1, {"from": ajna_whale})
     yvdai_pool.notifyRewardAmount(ajna, ajna_amount, {"from": ajna_whale})
     assert before == ajna.balanceOf(ajna_whale) + ajna_amount
+
+    # check what our UI would be showing
+    assert (
+        pytest.approx(yvdai_pool.getRewardForDuration(ajna), rel=RELATIVE_APPROX)
+        == ajna_amount
+    )
+    print(
+        "Total Rewards per week (starting):",
+        yvdai_pool.getRewardForDuration(ajna) / 1e18,
+    )
 
     # sleep to gain some earnings
     chain.sleep(86400)
@@ -66,11 +92,6 @@ def test_basic_operation(
     with brownie.reverts("Must be >0"):
         yvdai_pool.withdraw(0, {"from": yvdai_whale})
 
-    # exit, check that we have the same principal and earned more rewards
-    yvdai_pool.exit({"from": yvdai_whale})
-    assert yvdai_starting == yvdai.balanceOf(yvdai_whale)
-    assert ajna.balanceOf(yvdai_whale) > earned
-
     # check our setters
     with brownie.reverts("Rewards active"):
         yvdai_pool.setRewardsDuration(ajna, 100e18, {"from": ajna_whale})
@@ -78,13 +99,28 @@ def test_basic_operation(
         yvdai_pool.setZapContract(ZERO_ADDRESS, {"from": gov})
     yvdai_pool.setZapContract(zap, {"from": gov})
 
-    # sleep to get past our rewards window
+    # exit, check that we have the same principal and earned more rewards
     chain.sleep(86400 * 6)
+    yvdai_pool.exit({"from": yvdai_whale})
+    assert yvdai_starting == yvdai.balanceOf(yvdai_whale)
+    assert ajna.balanceOf(yvdai_whale) > earned
+
+    # check what our UI would be showing (shouldn't change!)
+    assert (
+        pytest.approx(yvdai_pool.getRewardForDuration(ajna), rel=RELATIVE_APPROX)
+        == ajna_amount
+    )
+    print(
+        "Total Rewards per week (after over):",
+        yvdai_pool.getRewardForDuration(ajna) / 1e18,
+    )
+
+    # check some other things after period ends
     with brownie.reverts("Must be >0"):
         yvdai_pool.setRewardsDuration(ajna, 0, {"from": ajna_whale})
     with brownie.reverts("!authorized"):
         yvdai_pool.setRewardsDuration(ajna, 100e18, {"from": gov})
-    yvdai_pool.setRewardsDuration(ajna, 86400 * 14, {"from": ajna_whale})
+    yvdai_pool.setRewardsDuration(ajna, 86400 * 5, {"from": ajna_whale})
     assert dai.balanceOf(zap) == 0
 
     # do a bit more setter testing
@@ -281,6 +317,8 @@ def test_multiple_rewards(
     # now we should be able to notify (make sure we've already done approvals though!)
     before = ajna.balanceOf(ajna_whale)
     ajna.approve(yvdai_pool, 2**256 - 1, {"from": ajna_whale})
+    with brownie.reverts("Must be >0"):
+        yvdai_pool.notifyRewardAmount(ajna, 0, {"from": ajna_whale})
     yvdai_pool.notifyRewardAmount(ajna, ajna_amount, {"from": ajna_whale})
     assert before == ajna.balanceOf(ajna_whale) + ajna_amount
 
@@ -342,7 +380,8 @@ def test_multiple_rewards(
     # exit, check that we have the same principal and earned more rewards
     yvdai_pool.exit({"from": yvdai_whale})
     assert yvdai_starting == yvdai.balanceOf(yvdai_whale)
-    assert ajna.balanceOf(yvdai_whale) > ajna_final
+    ajna_very_final = ajna.balanceOf(yvdai_whale)
+    assert ajna_very_final > ajna_final
     assert prisma.balanceOf(yvdai_whale) > prisma_final
 
     # check our setters
@@ -350,6 +389,8 @@ def test_multiple_rewards(
         yvdai_pool.setRewardsDuration(ajna, 100e18, {"from": ajna_whale})
     with brownie.reverts("No zero address"):
         yvdai_pool.setZapContract(ZERO_ADDRESS, {"from": gov})
+    with brownie.reverts("!authorized"):
+        yvdai_pool.setZapContract(zap, {"from": ajna_whale})
     yvdai_pool.setZapContract(zap, {"from": gov})
 
     # sleep to get past our rewards window
@@ -360,6 +401,12 @@ def test_multiple_rewards(
         yvdai_pool.setRewardsDuration(ajna, 100e18, {"from": gov})
     yvdai_pool.setRewardsDuration(ajna, 86400 * 14, {"from": ajna_whale})
     assert dai.balanceOf(zap) == 0
+
+    # no issues getting reward even when zero
+    yvdai_pool.getReward({"from": yvdai_whale})
+    assert ajna_very_final == ajna.balanceOf(yvdai_whale)
+    yvdai_pool.getOneReward(ajna, {"from": yvdai_whale})
+    assert ajna_very_final == ajna.balanceOf(yvdai_whale)
 
 
 def test_insanity(
@@ -535,11 +582,13 @@ def test_sweep_rewards(
     assert claimed >= earned
     print("Earned:", earned / 1e18, "Claimed:", claimed / 1e18)
 
-    # check that we can't sweep out yvOP or the staking token
-    with brownie.reverts():
+    # check that we can't sweep out reward or the staking token
+    with brownie.reverts("wait >90 days"):
         yvdai_pool.recoverERC20(yvdai_pool.rewardTokens(0), 10e18, {"from": gov})
-    with brownie.reverts():
+    with brownie.reverts("!staking token"):
         yvdai_pool.recoverERC20(yvdai_pool.stakingToken(), 10e18, {"from": gov})
+    with brownie.reverts("!authorized"):
+        yvdai_pool.recoverERC20(dai, 100e18, {"from": dai_whale})
 
     # we can sweep out DAI tho
     dai.transfer(yvdai_pool, 100e18, {"from": dai_whale})
@@ -702,6 +751,9 @@ def test_zap_in(
     yvmkusd,
     yvmkusd_amount,
     yvmkusd_whale,
+    mkusd,
+    mkusd_amount,
+    mkusd_whale,
     ajna,
     ajna_amount,
     ajna_whale,
@@ -729,6 +781,16 @@ def test_zap_in(
     # need to pretend to stakeFor directly from zap contract to hit the require
     with brownie.reverts("Must be >0"):
         yvdai_pool.stakeFor(dai_whale, 0, {"from": zap})
+
+    # oChad lowers deposit yvdai, rude!
+    yvdai.setDepositLimit(yvdai.totalAssets() + 1e18, {"from": gov})
+
+    # zap in, but it should fail since deposit limit is too low
+    with brownie.reverts():
+        zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
+
+    # raise deposit limit back up
+    yvdai.setDepositLimit(1_000_000_000e18, {"from": gov})
 
     # zap in, but can't zap zero
     with brownie.reverts():
@@ -766,8 +828,10 @@ def test_zap_in(
     # check claimable earnings, get reward
     earned = yvdai_pool.earned(dai_whale, ajna)
     assert earned > 0
+    before = ajna.balanceOf(dai_whale)
     yvdai_pool.getReward({"from": dai_whale})
-    assert pytest.approx(ajna.balanceOf(dai_whale), rel=RELATIVE_APPROX) == earned
+    profit = ajna.balanceOf(dai_whale) - before
+    assert profit >= earned
 
     # sleep to gain some earnings
     chain.sleep(86400)
@@ -779,16 +843,60 @@ def test_zap_in(
     assert pytest.approx(dai_starting, rel=RELATIVE_APPROX) == dai.balanceOf(dai_whale)
     assert ajna.balanceOf(dai_whale) > earned
 
-    # check that no one else can use stakeFor (even gov!)
+    # check that anyone can use stakeFor (even gov!)
     yvdai.approve(yvdai_pool, 2**256 - 1, {"from": gov})
     yvdai.transfer(gov, 100e18, {"from": yvdai_whale})
-    with brownie.reverts("!authorized"):
-        yvdai_pool.stakeFor(gov, 100e18, {"from": gov})
+    yvdai_pool.stakeFor(gov, 100e18, {"from": gov})
+
+    # zap into yvmkusd as well
+    # Approve and zap into to the staking contract
+    mkusd_starting = mkusd.balanceOf(mkusd_whale)
+    mkusd.approve(zap, 2**256 - 1, {"from": mkusd_whale})
+
+    # can't deposit into a contract that isn't in our registry
+    with brownie.reverts("staking pool doesn't exist"):
+        zap.zapIn(yvmkusd, mkusd_amount, {"from": mkusd_whale})
+
+    # can't zap into zero address (vault deposit() step will fail)
+    with brownie.reverts():
+        zap.zapInLegacy(ZERO_ADDRESS, mkusd_amount, {"from": mkusd_whale})
+
+    # Add our staking contract to our registry
+    registry.addStakingPool(yvmkusd_pool, yvmkusd, False, {"from": gov})
+
+    # need to pretend to stakeFor directly from zap contract to hit the require
+    with brownie.reverts("Must be >0"):
+        yvmkusd_pool.stakeFor(mkusd_whale, 0, {"from": zap})
+
+    # oChad lowers deposit yvdai, rude!
+    manager = accounts.at("0xa05c4256ff0dd38697e63D48dF146e6e2FE7fe4A", force=True)
+    yvmkusd.set_deposit_limit(yvmkusd.totalAssets() + 1e18, {"from": manager})
+
+    # zap in, but it should fail since deposit limit is too low
+    with brownie.reverts("exceed deposit limit"):
+        zap.zapIn(yvmkusd, mkusd_amount, {"from": mkusd_whale})
+
+    # raise deposit limit back up
+    yvmkusd.set_deposit_limit(1_000_000_000e18, {"from": manager})
+
+    # zap in, but can't zap zero (fails at vault level)
+    with brownie.reverts("cannot mint zero"):
+        zap.zapIn(yvmkusd, 0, {"from": mkusd_whale})
+    zap.zapIn(yvmkusd, mkusd_amount, {"from": mkusd_whale})
+    balance = yvmkusd_pool.balanceOf(mkusd_whale)
+    assert balance > 0
+    print("Staked balance of yvmkUSD, should be ~1000:", balance / 1e18)
 
     # zero address for registry will revert on zap in
     zap.setPoolRegistry(ZERO_ADDRESS, {"from": gov})
     with brownie.reverts():
         zap.zapInLegacy(yvdai, dai_amount, {"from": dai_whale})
+
+    # transfer ownership
+    with brownie.reverts():
+        zap.transferOwnership(mkusd_whale, {"from": mkusd_whale})
+    zap.transferOwnership(mkusd_whale, {"from": gov})
+    assert zap.owner() == mkusd_whale
 
 
 def test_zap_out(
@@ -802,9 +910,15 @@ def test_zap_out(
     yvmkusd,
     yvmkusd_amount,
     yvmkusd_whale,
+    mkusd,
+    mkusd_amount,
+    mkusd_whale,
     ajna,
     ajna_amount,
     ajna_whale,
+    prisma,
+    prisma_amount,
+    prisma_whale,
     registry,
     zap,
     yvdai_pool,
@@ -837,8 +951,10 @@ def test_zap_out(
     # check claimable earnings, get reward
     earned = yvdai_pool.earned(yvdai_whale, ajna)
     assert earned > 0
+    before = ajna.balanceOf(yvdai_whale)
     yvdai_pool.getReward({"from": yvdai_whale})
-    assert pytest.approx(ajna.balanceOf(yvdai_whale), rel=RELATIVE_APPROX) == earned
+    profit = ajna.balanceOf(yvdai_whale) - before
+    assert profit >= earned
 
     # sleep to gain some earnings
     chain.sleep(86400)
@@ -855,6 +971,53 @@ def test_zap_out(
         dai_out / 1e18,
     )
     assert ajna.balanceOf(yvdai_whale) > earned
+
+    # Approve and deposit to the staking contract
+    yvmkusd_starting = yvmkusd.balanceOf(yvmkusd_whale)
+    yvmkusd.approve(yvmkusd_pool, 2**256 - 1, {"from": yvmkusd_whale})
+    yvmkusd_pool.stake(yvmkusd_amount, {"from": yvmkusd_whale})
+    assert yvmkusd_pool.balanceOf(yvmkusd_whale) == yvmkusd_amount
+
+    # Add our staking contract to our registry
+    registry.addStakingPool(yvmkusd_pool, yvmkusd, False, {"from": gov})
+
+    # add prisma and grant role to whale
+    week = 7 * 86400
+    yvmkusd_pool.addReward(prisma, prisma_whale, week, {"from": gov})
+
+    # now we should be able to notify (make sure we've already done approvals though!)
+    before = prisma.balanceOf(prisma_whale)
+    prisma.approve(yvmkusd_pool, 2**256 - 1, {"from": prisma_whale})
+    yvmkusd_pool.notifyRewardAmount(prisma, prisma_amount, {"from": prisma_whale})
+    assert before == prisma.balanceOf(prisma_whale) + prisma_amount
+
+    # sleep to gain some earnings
+    chain.sleep(86400)
+    chain.mine(1)
+
+    # check claimable earnings, get reward
+    earned = yvmkusd_pool.earned(yvmkusd_whale, prisma)
+    assert earned > 0
+    before = prisma.balanceOf(yvmkusd_whale)
+    yvmkusd_pool.getReward({"from": yvmkusd_whale})
+    profit = prisma.balanceOf(yvmkusd_whale) - before
+    assert profit >= earned
+
+    # sleep to gain some earnings
+    chain.sleep(86400)
+    chain.mine(1)
+
+    # zap out (exit) check that we have the same principal and earned more rewards
+    mkusd_balance = mkusd.balanceOf(yvmkusd_whale)
+    zap.zapOut(yvmkusd, yvmkusd_amount, True, {"from": yvmkusd_whale})
+    mkusd_out = mkusd.balanceOf(yvmkusd_whale) - mkusd_balance
+    print(
+        "yvmkUSD In * PPS:",
+        yvmkusd_amount * yvmkusd.pricePerShare() / 1e36,
+        "mkUSD Out:",
+        mkusd_out / 1e18,
+    )
+    assert prisma.balanceOf(yvmkusd_whale) > earned
 
 
 def test_registry(

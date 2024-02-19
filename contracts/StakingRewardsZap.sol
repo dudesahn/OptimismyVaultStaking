@@ -188,7 +188,7 @@ contract StakingRewardsZap is Ownable {
         underlyingAmount = targetVault.redeem(
             _vaultTokenAmount,
             address(this),
-            msg.sender
+            address(this)
         );
 
         // I think maybe here actually we should check how much we have staked, make sure we unstaked all we withdrew
@@ -196,7 +196,8 @@ contract StakingRewardsZap is Ownable {
 
         // this shouldn't be reached thanks to vault checks, but leave it in case vault code changes
         require(
-            underlying.balanceOf(address(this)) > beforeAmount,
+            underlying.balanceOf(address(this)) > beforeAmount &&
+                targetVault.balanceOf(address(this)) == 0,
             "redeem failed"
         );
 
@@ -244,7 +245,8 @@ contract StakingRewardsZap is Ownable {
 
         // this shouldn't be reached thanks to vault checks, but leave it in case vault code changes
         require(
-            underlying.balanceOf(address(this)) > beforeAmount,
+            underlying.balanceOf(address(this)) > beforeAmount &&
+                targetVault.balanceOf(address(this)) == 0,
             "withdraw failed"
         );
 

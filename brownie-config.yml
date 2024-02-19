@@ -21,3 +21,5 @@ reports:
   exclude_contracts:
     - Address
     - SafeERC20
+    - Math
+    - ReentrancyGuard

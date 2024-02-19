@@ -51,7 +51,7 @@ def yvdai_whale(accounts):
 @pytest.fixture(scope="session")
 def yvmkusd():
     token_address = "0x04AeBe2e4301CdF5E9c57B01eBdfe4Ac4B48DD13"  # this is our V3 vault (yvmkUSD-A V3)
-    yield interface.IVaultFactory045(token_address)
+    yield Contract(token_address)
 
 
 @pytest.fixture(scope="session")
@@ -192,4 +192,4 @@ def yvmkusd_pool(StakingRewardsMulti, gov, registry, yvmkusd, zap):
 
 @pytest.fixture(scope="session")
 def RELATIVE_APPROX():
-    yield 1e-2
+    yield 1e-12
