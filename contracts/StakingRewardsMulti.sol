@@ -348,6 +348,15 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
         emit WithdrawnFor(_recipient, _amount);
 
         // claim rewards if exiting
+        // REVIEW: you can move this code block to the top and do something like:
+        /*
+          if (_exit) {
+          _amount = Math.min(_amount, _balances[_recipient]);
+          _getRewardFor(_recipient);
+        }
+        .... withdraw logic
+        */
+        // This would allow withdraws of 2**256-1
         if (_exit) {
             require(_balances[_recipient] == 0, "Must withdraw all");
             _getRewardFor(_recipient);
