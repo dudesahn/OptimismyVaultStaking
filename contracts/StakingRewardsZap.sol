@@ -91,8 +91,10 @@ contract StakingRewardsZap is Ownable {
         IVault targetVault = IVault(_targetVault);
         IERC20 underlying = IERC20(targetVault.asset());
 
-        // transfer to zap and deposit underlying to vault, but first check our approvals and store starting amount
+        // transfer to zap and deposit underlying to vault, but first check our approvals
         _checkAllowance(_targetVault, address(underlying), _underlyingAmount);
+
+        // check our before amount in case there is any loose token stuck in the zap
         uint256 beforeAmount = underlying.balanceOf(address(this));
         underlying.transferFrom(msg.sender, address(this), _underlyingAmount);
 
@@ -136,8 +138,10 @@ contract StakingRewardsZap is Ownable {
         IVault targetVault = IVault(_targetVault);
         IERC20 underlying = IERC20(targetVault.token());
 
-        // transfer to zap and deposit underlying to vault, but first check our approvals and store starting amount
+        // transfer to zap and deposit underlying to vault, but first check our approvals
         _checkAllowance(_targetVault, address(underlying), _underlyingAmount);
+
+        // check our before amount in case there is any loose token stuck in the zap
         uint256 beforeAmount = underlying.balanceOf(address(this));
         underlying.transferFrom(msg.sender, address(this), _underlyingAmount);
 
@@ -178,21 +182,20 @@ contract StakingRewardsZap is Ownable {
         require(_vaultStakingPool != address(0), "staking pool doesn't exist");
         IStakingRewards vaultStakingPool = IStakingRewards(_vaultStakingPool);
 
-        // transfer to zap and deposit underlying to vault, but first check our approvals and store starting amount
+        // withdraw from staking pool to zap
         vaultStakingPool.withdrawFor(msg.sender, _vaultTokenAmount, _exit);
 
         // get our underlying token
         IVault targetVault = IVault(_vault);
         IERC20 underlying = IERC20(targetVault.asset());
+
+        // check our before amount in case there is any loose token stuck in the zap
         uint256 beforeAmount = underlying.balanceOf(address(this));
         underlyingAmount = targetVault.redeem(
             _vaultTokenAmount,
             address(this),
             address(this)
         );
-
-        // I think maybe here actually we should check how much we have staked, make sure we unstaked all we withdrew
-        // and/or unstaked all we meant to
 
         // this shouldn't be reached thanks to vault checks, but leave it in case vault code changes
         require(
@@ -228,20 +231,19 @@ contract StakingRewardsZap is Ownable {
         require(_vaultStakingPool != address(0), "staking pool doesn't exist");
         IStakingRewards vaultStakingPool = IStakingRewards(_vaultStakingPool);
 
-        // transfer to zap and deposit underlying to vault, but first check our approvals and store starting amount
+        // withdraw from staking pool to zap
         vaultStakingPool.withdrawFor(msg.sender, _vaultTokenAmount, _exit);
 
         // get our underlying token
         IVault targetVault = IVault(_vault);
         IERC20 underlying = IERC20(targetVault.token());
+
+        // check our before amount in case there is any loose token stuck in the zap
         uint256 beforeAmount = underlying.balanceOf(address(this));
         underlyingAmount = targetVault.withdraw(
             _vaultTokenAmount,
             address(this)
         );
-
-        // I think maybe here actually we should check how much we have staked, make sure we unstaked all we withdrew
-        // and/or unstaked all we meant to
 
         // this shouldn't be reached thanks to vault checks, but leave it in case vault code changes
         require(

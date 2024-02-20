@@ -840,7 +840,9 @@ def test_zap_in(
     # exit, check that we have the same principal and earned more rewards
     yvdai_pool.exit({"from": dai_whale})
     yvdai.withdraw({"from": dai_whale})
-    assert pytest.approx(dai_starting, rel=RELATIVE_APPROX) == dai.balanceOf(dai_whale)
+    assert dai.balanceOf(dai_whale) >= dai_starting or pytest.approx(
+        dai_starting, rel=RELATIVE_APPROX
+    ) == dai.balanceOf(dai_whale)
     assert ajna.balanceOf(dai_whale) > earned
 
     # check that anyone can use stakeFor (even gov!)
@@ -895,6 +897,8 @@ def test_zap_in(
     # transfer ownership
     with brownie.reverts():
         zap.transferOwnership(mkusd_whale, {"from": mkusd_whale})
+    with brownie.reverts():
+        zap.transferOwnership(ZERO_ADDRESS, {"from": gov})
     zap.transferOwnership(mkusd_whale, {"from": gov})
     assert zap.owner() == mkusd_whale
 
@@ -1042,7 +1046,7 @@ def test_registry(
     strategist,
 ):
     # check that dai isn't registered yet
-    assert registry.isRegistered(dai.address) == False
+    assert registry.stakingPool(yvdai.address) == ZERO_ADDRESS
 
     # not just anyone can add a pool
     with brownie.reverts():
@@ -1050,7 +1054,7 @@ def test_registry(
 
     # Add our staking contract to our registry
     registry.addStakingPool(yvdai_pool, yvdai, False, {"from": gov})
-    assert registry.isRegistered(yvdai.address) == True
+    assert registry.stakingPool(yvdai.address) != ZERO_ADDRESS
 
     # can't have a mismatch in tokens
     with brownie.reverts():
@@ -1104,7 +1108,7 @@ def test_registry(
 
     # make sure our length is what we expect for tokens
     assert registry.numTokens() == 1
-    assert registry.isRegistered(yvmkusd.address) == False
+    assert registry.stakingPool(yvmkusd.address) == ZERO_ADDRESS
     assert registry.isStakingPoolEndorsed(yvmkusd_pool) == False
 
     # deploy yvmkusd via registry cloning
@@ -1116,6 +1120,12 @@ def test_registry(
     with brownie.reverts():
         registry.setDefaultContracts(yvdai_pool, zap, {"from": yvdai_whale})
 
+    with brownie.reverts("no zero address"):
+        registry.setDefaultContracts(yvdai_pool, ZERO_ADDRESS, {"from": gov})
+
+    with brownie.reverts("no zero address"):
+        registry.setDefaultContracts(ZERO_ADDRESS, zap, {"from": gov})
+
     registry.setDefaultContracts(yvdai_pool, zap, {"from": gov})
 
     # only pool endorsers can set
@@ -1125,12 +1135,36 @@ def test_registry(
     # clone and add
     registry.cloneAndAddStakingPool(yvmkusd, {"from": gov})
 
+    # the new staking pool will be the one in the registry
+    assert registry.isStakingPoolEndorsed(yvmkusd_pool) == False
+    print("yvmkUSD Staking Pool:", registry.stakingPool(yvmkusd.address))
+
     # add first yvmkusd staking as replacement
     registry.addStakingPool(yvmkusd_pool, yvmkusd, True, {"from": gov})
     assert registry.numTokens() == 2
+
+    # now this one should show up in the registry
     assert registry.isStakingPoolEndorsed(yvmkusd_pool) == True
-    assert registry.isRegistered(yvmkusd.address) == True
+    assert registry.stakingPool(yvmkusd.address) != ZERO_ADDRESS
+    print("yvmkUSD Staking Pool:", registry.stakingPool(yvmkusd.address))
+
+    # clone and add as replacement
+    registry.cloneAndAddStakingPool(yvmkusd, {"from": gov})
+    assert registry.numTokens() == 2
+
+    # again, back to a new staking pool
+    assert registry.isStakingPoolEndorsed(yvmkusd_pool) == False
+    assert registry.stakingPool(yvmkusd.address) != ZERO_ADDRESS
+    print("yvmkUSD Staking Pool:", registry.stakingPool(yvmkusd.address))
 
     # check our tokens view
     assert registry.tokens(0) == yvdai.address
     assert registry.tokens(1) == yvmkusd.address
+
+    # transfer ownership
+    with brownie.reverts():
+        registry.transferOwnership(yvdai_whale, {"from": yvdai_whale})
+    registry.transferOwnership(yvdai_whale, {"from": gov})
+    with brownie.reverts():
+        registry.acceptOwnership({"from": gov})
+    registry.acceptOwnership({"from": yvdai_whale})

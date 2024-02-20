@@ -399,27 +399,6 @@ contract StakingRewardsMulti is ReentrancyGuard, Pausable {
         _getRewardFor(msg.sender);
     }
 
-    /**
-     * @notice Withdraw all of a user's vault tokens from the staking pool.
-     * @dev Waives right to claim all pending rewards. Should only be used if something breaks with reward logic.
-     */
-    function emergencyExit() external nonReentrant {
-        // remove amount from total supply and user balance
-        uint256 amount = _balances[msg.sender];
-        _totalSupply = _totalSupply - amount;
-        _balances[msg.sender] = 0;
-
-        // set rewards to zero
-        for (uint256 i; i < rewardTokens.length; ++i) {
-            address _rewardsToken = rewardTokens[i];
-            rewards[msg.sender][_rewardsToken] = 0;
-        }
-
-        // send the requested amount, emit the event
-        stakingToken.safeTransfer(msg.sender, amount);
-        emit Withdrawn(msg.sender, amount);
-    }
-
     /* ========== RESTRICTED FUNCTIONS ========== */
 
     /**

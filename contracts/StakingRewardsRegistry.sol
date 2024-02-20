@@ -25,14 +25,11 @@ contract StakingRewardsRegistry is Ownable2Step {
     /// @notice Tokens that this registry has added stakingPools for.
     address[] public tokens;
 
-    /// @notice Check if an stakingPool exists for a given vault token.
-    mapping(address => bool) public isRegistered;
+    /// @notice Check if a given stakingPool is known to this registry.
+    mapping(address => bool) public isStakingPoolEndorsed;
 
     /// @notice Check if an address is allowed to own stakingPools from this registry.
     mapping(address => bool) public approvedPoolOwner;
-
-    /// @notice Check if a given stakingPool is known to this registry.
-    mapping(address => bool) public isStakingPoolEndorsed;
 
     /// @notice Check if an address can add pools to this registry.
     mapping(address => bool) public poolEndorsers;
@@ -82,12 +79,10 @@ contract StakingRewardsRegistry is Ownable2Step {
             zapContract
         );
 
+        bool tokenIsRegistered = stakingPool[_stakingToken] != address(0);
+
         // Add to the registry.
-        _addStakingPool(
-            newStakingPool,
-            _stakingToken,
-            isRegistered[_stakingToken]
-        );
+        _addStakingPool(newStakingPool, _stakingToken, tokenIsRegistered);
     }
 
     /**
@@ -133,7 +128,7 @@ contract StakingRewardsRegistry is Ownable2Step {
         // Make sure we're only using the latest stakingPool in our registry
         if (_replaceExistingPool) {
             require(
-                isRegistered[_token] == true,
+                stakingPool[_token] != address(0),
                 "token isn't registered, can't replace"
             );
             address oldPool = stakingPool[_token];
@@ -144,11 +139,10 @@ contract StakingRewardsRegistry is Ownable2Step {
             replacedStakingPools.push(oldPool);
         } else {
             require(
-                isRegistered[_token] == false,
+                stakingPool[_token] == address(0),
                 "replace instead, pool already exists"
             );
             stakingPool[_token] = _stakingPool;
-            isRegistered[_token] = true;
             tokens.push(_token);
         }
 
